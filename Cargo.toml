@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "artinchip-rt",
+    "artinchip-hal",
+]
+resolver = "3"

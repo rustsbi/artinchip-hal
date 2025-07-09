@@ -5,6 +5,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![License: Mulan PSL v2](https://img.shields.io/badge/License-Mulan%20PSL%20v2-blue.svg)](https://opensource.org/license/mulanpsl-2-0)
 
+## Chip support
+
+| Part No | Support Status |
+|:--------|:---------------|
+| D12x | Pending |
+| D13x | Pending |
+| D21x | Pending |
+
 ## Contributing
 
 Contributions are welcome! 
