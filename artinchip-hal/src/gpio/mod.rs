@@ -1,4 +1,4 @@
-//! General Purpose Input Output (GPIO) peripheral.
+//! General Purpose Input Output (GPIO).
 
 mod register;
 
