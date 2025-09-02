@@ -324,9 +324,12 @@ impl Rs485DeTime {
     /// The time interval between the serial data stop bit and the falling edge of the DE signal, measured in serial clock cycles.
     #[doc(alias = "DE_DAT")]
     #[inline]
-    pub fn set_de_deassert_time(self, val: u8) -> Self {
-        assert!(val < 16, "Value out of bounds for DE_DAT (expected 0..=15)");
-        Self((self.0 & !Self::DE_DAT) | (Self::DE_DAT & ((val as u32) << 4)))
+    pub fn set_de_deassert_time(self, time: u8) -> Self {
+        assert!(
+            time < 16,
+            "Driver enable de-assert time out of range (expected 0..=15)"
+        );
+        Self((self.0 & !Self::DE_DAT) | (Self::DE_DAT & ((time as u32) << 4)))
     }
     /// Get the driver enable de-assert time.
     #[inline]
@@ -338,9 +341,12 @@ impl Rs485DeTime {
     /// The time interval between the rising edge of the DE signal and the start bit of the serial data, measured in serial clock cycles.
     #[doc(alias = "DE_AT")]
     #[inline]
-    pub fn set_de_assert_time(self, val: u8) -> Self {
-        assert!(val < 16, "Value out of bounds for DE_AT (expected 0..=15)");
-        Self((self.0 & !Self::DE_AT) | (Self::DE_AT & (val as u32)))
+    pub fn set_de_assert_time(self, time: u8) -> Self {
+        assert!(
+            time < 16,
+            "Driver enable assert time out of range (expected 0..=15)"
+        );
+        Self((self.0 & !Self::DE_AT) | (Self::DE_AT & (time as u32)))
     }
     /// Get the driver enable assert time.
     #[inline]
@@ -458,7 +464,7 @@ impl Rs485Control {
     /// Get rs485 slave mode.
     #[inline]
     pub fn rs485_slave_mode(self) -> Rs485SlaveMode {
-        match (self.0 & Self::RS485_SLAVE_MODE_SEL) >> 0 {
+        match self.0 & Self::RS485_SLAVE_MODE_SEL {
             0 => Rs485SlaveMode::NMM,
             1 => Rs485SlaveMode::AAD,
             _ => unreachable!(),
@@ -570,7 +576,7 @@ impl TransmitDelay {
 }
 
 /// UART debug register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 #[repr(transparent)]
 pub struct DebugRegister(u32);
 
@@ -612,7 +618,9 @@ mod tests {
         Rs485Control, Rs485ControlMode, Rs485DeTime, Rs485SlaveMode, TransmitDelay,
         TransmitFifoLevel, UartScratch, UartStatus, Version,
     };
+    use crate::test_should_panic;
     use core::mem::offset_of;
+
     #[test]
     fn struct_register_block_offset() {
         assert_eq!(offset_of!(RegisterBlock, uart16550), 0x0);
@@ -727,6 +735,19 @@ mod tests {
         assert_eq!(val.de_assert_time(), 0xF);
         assert_eq!(val.0, 0x0000_000F);
     }
+
+    test_should_panic!(
+        (
+            test_rs485_set_de_deassert_time_panic,
+            Rs485DeTime(0).set_de_deassert_time(16),
+            "Driver enable de-assert time out of range (expected 0..=15)"
+        ),
+        (
+            test_rs485_set_de_assert_time_panic,
+            Rs485DeTime(0).set_de_assert_time(16),
+            "Driver enable assert time out of range (expected 0..=15)"
+        ),
+    );
 
     #[test]
     fn struct_rs485_control_functions() {

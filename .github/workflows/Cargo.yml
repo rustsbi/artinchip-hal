@@ -1,0 +1,66 @@
+name: Cargo CI
+
+on: [push, pull_request]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    name: Rustfmt Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+      - name: Run cargo fmt
+        run: cargo fmt --all -- --check
+
+  test:
+    name: Run Tests
+    needs: fmt
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        PACKAGE: [artinchip-rt, artinchip-hal]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Run cargo test
+        run: cargo test -p ${{ matrix.PACKAGE }}
+
+  test-coverage:
+    name: Test Coverage
+    needs: [fmt, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin
+      - name: Generate code coverage
+        run: cargo tarpaulin --engine llvm --all-features --workspace --out Html --output-dir ./coverage-report
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-html
+          path: ./coverage-report/
+
+  clippy:
+    name: Clippy Check
+    needs: [fmt, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy
+      - name: Run cargo clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings

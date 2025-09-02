@@ -379,7 +379,7 @@ impl PllGeneral {
             val < 32,
             "Value out of bounds for PLL_ICP (expected 0..=31)"
         );
-        Self((self.0 & !Self::PLL_ICP) | (Self::PLL_ICP & ((val as u32) << 24)))
+        Self(self.0 & !Self::PLL_ICP | (Self::PLL_ICP & ((val as u32) << 24)))
     }
     /// Get adjustment of pll loop bandwidth.
     #[inline]
@@ -475,7 +475,7 @@ impl PllGeneral {
     #[inline]
     pub const fn set_factor_n(self, val: u8) -> Self {
         assert!(
-            (val > 13) && (val < 200),
+            val > 13 && val < 200,
             "Value out of bounds for FACTOR_N (expected 14..=199)"
         );
         Self((self.0 & !Self::FACTOR_N) | (Self::FACTOR_N & ((val as u32) << 8)))
@@ -738,8 +738,8 @@ impl PllFraConfig {
     #[inline]
     pub const fn set_fra_div(self, val: u32) -> Self {
         assert!(
-            val < 131072,
-            "Value out of bounds for FRA_IN (expected 0..=131071)"
+            val < 0x20000,
+            "Value out of bounds for FRA_IN (expected 0..=0x1FFFF)"
         );
         Self((self.0 & !Self::FRA_IN) | (Self::FRA_IN & val))
     }
@@ -858,8 +858,8 @@ impl PllFraSdm {
     #[doc(alias = "SDM_BOT")]
     pub const fn set_sdm_bottom(self, val: u32) -> Self {
         assert!(
-            val < 131072,
-            "Value out of bounds for SDM_BOT (expected 0..=131071)"
+            val < 0x20000,
+            "Value out of bounds for SDM_BOT (expected 0..=0x1FFFF)"
         );
         Self((self.0 & !Self::SDM_BOT) | (Self::SDM_BOT & val))
     }
@@ -2186,6 +2186,7 @@ mod tests {
         SerialClockDivider, SimpleModule0Clock, SimpleModule1Clock, SimpleModule2Clock,
         SimpleModule3Clock, SimpleModule4Clock, SimpleModule5Clock, SimpleModule6Clock, WdogClock,
     };
+    use crate::test_should_panic;
     use core::mem::offset_of;
 
     #[test]
@@ -2349,6 +2350,29 @@ mod tests {
         assert_eq!(val.0, 0x0000_0001);
     }
 
+    test_should_panic!(
+        (
+            test_pll_general_set_pll_icp_panic,
+            PllGeneral(0x0).set_pll_icp(0x20),
+            "Value out of bounds for PLL_ICP (expected 0..=31)"
+        ),
+        (
+            test_pll_general_set_factor_n_panic,
+            PllGeneral(0x0).set_factor_n(200),
+            "Value out of bounds for FACTOR_N (expected 14..=199)"
+        ),
+        (
+            test_pll_general_set_factor_m_panic,
+            PllGeneral(0x0).set_factor_m(0x4),
+            "Value out of bounds for FACTOR_M (expected 0..=3)"
+        ),
+        (
+            test_pll_general_set_factor_p_panic,
+            PllGeneral(0x0).set_factor_p(0x2),
+            "Value out of bounds for FACTOR_P (expected 0..=1)"
+        )
+    );
+
     #[test]
     fn struct_pll_int_config_functions() {
         let mut val = PllIntConfig(0x0);
@@ -2404,6 +2428,44 @@ mod tests {
         assert_eq!(val.0, 0x0000_007F);
     }
 
+    test_should_panic!(
+        (
+            test_pll_int_config_set_pll_lock_time_panic,
+            PllIntConfig(0x0).set_pll_lock_time(8),
+            "Value out of bounds for PLL_LOCK_TIME (expected 0..=7)"
+        ),
+        (
+            test_pll_int_config_set_pll_ivco_panic,
+            PllIntConfig(0x0).set_pll_ivco(8),
+            "Value out of bounds for PLL_IVCO (expected 0..=7)"
+        ),
+        (
+            test_pll_int_config_set_pll_vco_sel_panic,
+            PllIntConfig(0x0).set_pll_vco_sel(4),
+            "Value out of bounds for PLL_VCO_SEL (expected 0..=3)"
+        ),
+        (
+            test_pll_int_config_set_pll_vco_rst_panic,
+            PllIntConfig(0x0).set_pll_vco_rst(2),
+            "Value out of bounds for PLL_VCO_RST (expected 0..=1)"
+        ),
+        (
+            test_pll_int_config_set_pll_vco_gain_panic,
+            PllIntConfig(0x0).set_pll_vco_gain(8),
+            "Value out of bounds for PLL_VCO_GAIN (expected 0..=7)"
+        ),
+        (
+            test_pll_int_config_set_pll_bint_panic,
+            PllIntConfig(0x0).set_pll_bint(128),
+            "Value out of bounds for PLL_BINT (expected 0..=127)"
+        ),
+        (
+            test_pll_int_config_set_pll_cint_panic,
+            PllIntConfig(0x0).set_pll_cint(128),
+            "Value out of bounds for PLL_CINT (expected 0..=127)"
+        )
+    );
+
     #[test]
     fn struct_pll_fra_config_functions() {
         let mut val = PllFraConfig(0x0);
@@ -2428,6 +2490,12 @@ mod tests {
         assert_eq!(val.fra_div(), 0x1FFFF);
         assert_eq!(val.0, 0x0001_FFFF);
     }
+
+    test_should_panic!((
+        test_pll_fra_config_set_fra_div_panic,
+        PllFraConfig(0x0).set_fra_div(0x20000),
+        "Value out of bounds for FRA_IN (expected 0..=0x1FFFF)"
+    ));
 
     #[test]
     fn struct_pll_fra_sdm_functions() {
@@ -2465,6 +2533,10 @@ mod tests {
         assert_eq!(val.sdm_freq(), SdmFreq::F33P0KHz);
         assert_eq!(val.0, 0x0006_0000);
 
+        val = val.set_sdm_freq(SdmFreq::F32P0KHz);
+        assert_eq!(val.sdm_freq(), SdmFreq::F32P0KHz);
+        assert_eq!(val.0, 0x0002_0000);
+
         val = val.set_sdm_freq(SdmFreq::F31P5KHz);
         assert_eq!(val.sdm_freq(), SdmFreq::F31P5KHz);
         assert_eq!(val.0, 0x0000_0000);
@@ -2473,6 +2545,19 @@ mod tests {
         assert_eq!(val.sdm_bottom(), 0x1FFFF);
         assert_eq!(val.0, 0x0001_FFFF);
     }
+
+    test_should_panic!(
+        (
+            test_pll_fra_sdm_set_sdm_step_panic,
+            PllFraSdm(0x0).set_sdm_step(512),
+            "Value out of bounds for SDM_STEP (expected 0..=511)"
+        ),
+        (
+            test_pll_fra_sdm_set_sdm_bottom_panic,
+            PllFraSdm(0x0).set_sdm_bottom(0x20000),
+            "Value out of bounds for SDM_BOT (expected 0..=0x1FFFF)"
+        )
+    );
 
     #[test]
     fn struct_pll_common_functions() {
@@ -2604,6 +2689,19 @@ mod tests {
         assert_eq!(val.0, 0x0000_0000);
     }
 
+    test_should_panic!(
+        (
+            test_pll_input_set_xtal_drive_panic,
+            PllInput(0x0).set_xtal_drive(4),
+            "Value out of bounds for XTAL_GM24M (expected 0..=3)"
+        ),
+        (
+            test_pll_input_set_osc_freq_panic,
+            PllInput(0x0).set_osc_freq(128),
+            "Value out of bounds for OSC_OUT_TR24M (expected 0..=127)"
+        )
+    );
+
     #[test]
     fn struct_clock_output_functions() {
         let mut val = ClockOutput(0x0);
@@ -2646,6 +2744,12 @@ mod tests {
         assert_eq!(val.0, 0x0000_001F);
     }
 
+    test_should_panic!((
+        test_clk_on_pll_intx_set_bus_clk_div_panic,
+        ClkOnPllIntx(0x0).set_bus_clk_div(32),
+        "Value out of bounds for BUS_CLK_DIV (expected 0..=31)"
+    ));
+
     #[test]
     fn struct_cpu_clock_functions() {
         let mut val = CpuClock(0x0);
@@ -2666,6 +2770,19 @@ mod tests {
         assert_eq!(val.clk_div(), 0x1F);
         assert_eq!(val.0, 0x0000_001F);
     }
+
+    test_should_panic!(
+        (
+            test_cpu_clock_set_cpu_axi_clk_div_panic,
+            CpuClock(0x0).set_cpu_axi_clk_div(32),
+            "Value out of bounds for CPU_AXI_CLK_DIV (expected 0..=31)"
+        ),
+        (
+            test_cpu_clock_set_clk_div_panic,
+            CpuClock(0x0).set_clk_div(32),
+            "Value out of bounds for CLK_DIV (expected 0..=31)"
+        )
+    );
 
     #[test]
     fn struct_wdog_clock_functions() {
@@ -2817,6 +2934,12 @@ mod tests {
         assert_eq!(val.0, 0x0000_001F);
     }
 
+    test_should_panic!((
+        test_ddr_clock_set_module_clk_div_panic,
+        DdrClock(0x0).set_module_clk_div(32),
+        "Value out of bounds for MOD_CLK_DIV (expected 0..=31)"
+    ));
+
     #[test]
     fn struct_disp_clock_functions() {
         let mut val = DispClock(0x0);
@@ -2842,6 +2965,24 @@ mod tests {
         assert_eq!(val.0, 0x0000_0007);
     }
 
+    test_should_panic!(
+        (
+            test_disp_clock_set_pix_clk_div_l_panic,
+            DispClock(0x0).set_pix_clk_div_l(4),
+            "Value out of bounds for PIXCLK_DIV_L (expected 0..=3)"
+        ),
+        (
+            test_disp_clock_set_pix_clk_div_m_panic,
+            DispClock(0x0).set_pix_clk_div_m(32),
+            "Value out of bounds for PIXCLK_DIV_M (expected 0..=31)"
+        ),
+        (
+            test_disp_clock_set_serial_clk_div_n_panic,
+            DispClock(0x0).set_serial_clk_div_n(8),
+            "Value out of bounds for SCLK_DIV_N (expected 0..=7)"
+        )
+    );
+
     #[test]
     fn struct_audio_serial_clock_functions() {
         let mut val = AudioSerialClock(0x0).set_serial_clk_div(SerialClockDivider::Div49);
@@ -2861,6 +3002,12 @@ mod tests {
         assert_eq!(val.module_clk_div(), 0x1F);
         assert_eq!(val.0, 0x0000_001F);
     }
+
+    test_should_panic!((
+        test_simple_module0_clock_set_module_clk_div_panic,
+        SimpleModule0Clock(0x0).set_module_clk_div(32),
+        "Value out of bounds for MOD_CLK_DIV (expected 0..=31)"
+    ));
 
     #[test]
     fn struct_simple_module1_clock_funcions() {
@@ -2992,6 +3139,12 @@ mod tests {
         assert_eq!(val.0, 0x0000_001F);
     }
 
+    test_should_panic!((
+        test_simple_module6_clock_set_module_clk_div_panic,
+        SimpleModule6Clock(0x0).set_module_clk_div(32),
+        "Value out of bounds for MOD_CLK_DIV (expected 0..=31)"
+    ));
+
     #[test]
     fn struct_normal_module_clock_functions() {
         let mut val = NormalModuleClock(0x0);
@@ -3024,4 +3177,10 @@ mod tests {
         assert_eq!(val.module_clk_div(), 0x1F);
         assert_eq!(val.0, 0x0000_001F);
     }
+
+    test_should_panic!((
+        test_normal_module_clock_set_module_clk_div_panic,
+        NormalModuleClock(0x0).set_module_clk_div(32),
+        "Value out of bounds for MOD_CLK_DIV (expected 0..=31)"
+    ));
 }

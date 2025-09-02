@@ -157,7 +157,7 @@ impl InterruptState {
 }
 
 /// Clear output register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 #[repr(transparent)]
 pub struct OutputClear(u32);
 
@@ -171,7 +171,7 @@ impl OutputClear {
 }
 
 /// Set output register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 #[repr(transparent)]
 pub struct OutputSet(u32);
 
@@ -185,7 +185,7 @@ impl OutputSet {
 }
 
 /// Toggle output register.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 #[repr(transparent)]
 pub struct OutputToggle(u32);
 
@@ -452,10 +452,7 @@ impl PinConfig {
     #[doc(alias = "PIN_FUN")]
     #[inline]
     pub const fn set_pin_func(self, func: u8) -> Self {
-        assert!(
-            func < 16,
-            "Function value out of bounds for PIN_FUN (expected 0..=15)"
-        );
+        assert!(func < 16, "Function value out of range (expected 0..=15)");
         Self((self.0 & !Self::PIN_FUN) | (Self::PIN_FUN & (func as u32)))
     }
     /// Set pin function.
@@ -471,6 +468,7 @@ mod tests {
         GeneralIrqMode, GpioGroup, InputState, InterruptEnable, InterruptState, OutputClear,
         OutputConfig, OutputSet, OutputToggle, PinConfig, PinDriveStrength, PinPull, RegisterBlock,
     };
+    use crate::test_should_panic;
     use core::mem::{offset_of, size_of};
 
     #[test]
@@ -506,6 +504,19 @@ mod tests {
         }
     }
 
+    test_should_panic!(
+        (
+            test_input_state_is_high_panic,
+            InputState(0).is_high(32),
+            "Pin index out of range (expected 0..=31)"
+        ),
+        (
+            test_input_state_is_low_panic,
+            InputState(0).is_low(32),
+            "Pin index out of range (expected 0..=31)"
+        ),
+    );
+
     #[test]
     fn struct_output_config_functions() {
         let mut val = OutputConfig(0x0);
@@ -520,6 +531,29 @@ mod tests {
         }
     }
 
+    test_should_panic!(
+        (
+            test_output_config_is_high_panic,
+            OutputConfig(0).is_high(32),
+            "Pin index out of range (expected 0..=31)"
+        ),
+        (
+            test_output_config_is_low_panic,
+            OutputConfig(0).is_low(32),
+            "Pin index out of range (expected 0..=31)"
+        ),
+        (
+            test_output_config_set_high_panic,
+            OutputConfig(0).set_high(32),
+            "Pin index out of range (expected 0..=31)"
+        ),
+        (
+            test_output_config_set_low_panic,
+            OutputConfig(0).set_low(32),
+            "Pin index out of range (expected 0..=31)"
+        ),
+    );
+
     #[test]
     fn struct_interrupt_enable_functions() {
         let mut val = InterruptEnable(0x0);
@@ -533,6 +567,24 @@ mod tests {
             assert!(!val.is_interrupt_enabled(pin + 16));
         }
     }
+
+    test_should_panic!(
+        (
+            test_interrupt_enable_is_enabled_panic,
+            InterruptEnable(0).is_interrupt_enabled(32),
+            "Pin index out of range (expected 0..=31)"
+        ),
+        (
+            test_interrupt_enable_enable_panic,
+            InterruptEnable(0).enable_interrupt(32),
+            "Pin index out of range (expected 0..=31)"
+        ),
+        (
+            test_interrupt_enable_disable_panic,
+            InterruptEnable(0).disable_interrupt(32),
+            "Pin index out of range (expected 0..=31)"
+        ),
+    );
 
     #[test]
     fn struct_interrupt_state_functions() {
@@ -549,6 +601,19 @@ mod tests {
         assert_eq!(val.0, 0xFFFF_0000);
     }
 
+    test_should_panic!(
+        (
+            test_interrupt_state_is_pending_panic,
+            InterruptState(0).is_interrupt_pending(32),
+            "Pin index out of range (expected 0..=31)"
+        ),
+        (
+            test_interrupt_state_clear_panic,
+            InterruptState(0).clear_interrupt(32),
+            "Pin index out of range (expected 0..=31)"
+        ),
+    );
+
     #[test]
     fn struct_output_clear_functions() {
         let mut val = OutputClear(0x0);
@@ -558,6 +623,12 @@ mod tests {
         }
         assert_eq!(val.0, 0x0000_FFFF);
     }
+
+    test_should_panic!((
+        test_output_clear_clear_output_panic,
+        OutputClear(0).clear_output(32),
+        "Pin index out of range (expected 0..=31)"
+    ),);
 
     #[test]
     fn struct_output_set_functions() {
@@ -569,6 +640,12 @@ mod tests {
         assert_eq!(val.0, 0x0000_FFFF);
     }
 
+    test_should_panic!((
+        test_output_set_set_output_panic,
+        OutputSet(0).set_output(32),
+        "Pin index out of range (expected 0..=31)"
+    ),);
+
     #[test]
     fn struct_output_toggle_functions() {
         let mut val = OutputToggle(0x0);
@@ -578,6 +655,12 @@ mod tests {
         }
         assert_eq!(val.0, 0x0000_FFFF);
     }
+
+    test_should_panic!((
+        test_output_toggle_toggle_output_panic,
+        OutputToggle(0).toggle_output(32),
+        "Pin index out of range (expected 0..=31)"
+    ),);
 
     #[test]
     fn struct_pin_config_functions() {
@@ -619,7 +702,7 @@ mod tests {
         assert!(!val.is_general_input_enabled());
         assert_eq!(val.0, 0x0000_0000);
 
-        for i in 0..4 {
+        for i in 0..5 {
             let (test_mode, test_val) = match i {
                 0 => (GeneralIrqMode::FallingEdge, 0x0000_0000),
                 1 => (GeneralIrqMode::RisingEdge, 0x0000_1000),
@@ -671,4 +754,27 @@ mod tests {
         assert_eq!(val.pin_func(), 0xF);
         assert_eq!(val.0, 0x0000_000F);
     }
+
+    test_should_panic!(
+        (
+            test_pin_config_set_db1_point_panic,
+            PinConfig(0).set_db1_point(16),
+            "Value out of bounds for GEN_IN_DB1_POINT (expected 0..=15)"
+        ),
+        (
+            test_pin_config_set_db1_sample_panic,
+            PinConfig(0).set_db1_sample(16),
+            "Value out of bounds for GEN_IN_DB1_SAMP (expected 0..=15)"
+        ),
+        (
+            test_pin_config_set_db0_point_panic,
+            PinConfig(0).set_db0_point(16),
+            "Value out of bounds for GEN_IN_DB0_POINT (expected 0..=15)"
+        ),
+        (
+            test_pin_config_set_pin_func_panic,
+            PinConfig(0).set_pin_func(16),
+            "Function value out of range (expected 0..=15)"
+        ),
+    );
 }
