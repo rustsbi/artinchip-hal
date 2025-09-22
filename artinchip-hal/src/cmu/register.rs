@@ -379,7 +379,7 @@ impl PllGeneral {
             val < 32,
             "Value out of bounds for PLL_ICP (expected 0..=31)"
         );
-        Self(self.0 & !Self::PLL_ICP | (Self::PLL_ICP & ((val as u32) << 24)))
+        Self((self.0 & !Self::PLL_ICP) | (Self::PLL_ICP & ((val as u32) << 24)))
     }
     /// Get adjustment of pll loop bandwidth.
     #[inline]
