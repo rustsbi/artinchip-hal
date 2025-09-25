@@ -3,6 +3,7 @@
 
 pub mod axi_cfg;
 pub mod cmu;
+pub mod dma;
 pub mod gpio;
 pub mod sdmc;
 pub mod uart;
