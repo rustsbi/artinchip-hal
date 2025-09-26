@@ -4,3 +4,10 @@ version = "0.0.0"
 edition = "2024"
 
 [dependencies]
+
+[features]
+d12x = []
+d13x = []
+d21x = []
+g73x = []
+m6800 = []
