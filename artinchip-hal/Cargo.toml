@@ -6,3 +6,10 @@ edition = "2024"
 [dependencies]
 volatile-register = "0.2.2"
 uart16550 = "0.0.1"
+
+[features]
+d12x = []
+d13x = []
+d21x = []
+g73x = []
+m6800 = []

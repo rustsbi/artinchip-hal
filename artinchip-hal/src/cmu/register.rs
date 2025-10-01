@@ -110,7 +110,9 @@ pub struct RegisterBlock {
     /// DMA clock register (`CLK_DMA`).
     #[doc(alias = "CLK_DMA")]
     pub clock_dma: RW<SimpleModule2Clock>,
-    _reserved15: [u8; 0x4],
+    /// DCE clock register (`CLK_DCE`).
+    #[doc(alias = "CLK_DCE")]
+    pub clock_dce: RW<SimpleModule2Clock>,
     /// CE clock register (`CLK_CE`).
     #[doc(alias = "CLK_CE")]
     pub clock_ce: RW<NormalModuleClock>,
@@ -124,7 +126,7 @@ pub struct RegisterBlock {
     /// USB HOST1 clock register (`CLK_USB_HOST1`).
     #[doc(alias = "CLK_USB_HOST1")]
     pub clock_usb_host1: RW<SimpleModule2Clock>,
-    _reserved16: [u8; 0x8],
+    _reserved15: [u8; 0x8],
     /// USB PHY0 clock register (`CLK_USB_PHY0`|`CLK_USB_PHY`).
     #[doc(alias = "CLK_USB_PHY0")]
     #[doc(alias = "CLK_USB_PHY")]
@@ -132,7 +134,7 @@ pub struct RegisterBlock {
     /// USB PHY1 clock register (`CLK_USB_PHY1`).
     #[doc(alias = "CLK_USB_PHY1")]
     pub clock_usb_phy1: RW<SimpleModule4Clock>,
-    _reserved17: [u8; 0x8],
+    _reserved16: [u8; 0x8],
     /// EMAC or GMAC0 clock register (`CLK_EMAC`|`CLK_GMAC0`).
     #[doc(alias = "CLK_EMAC")]
     #[doc(alias = "CLK_GMAC0")]
@@ -140,7 +142,7 @@ pub struct RegisterBlock {
     /// GMAC1 clock register (`CLK_GMAC1`).
     #[doc(alias = "CLK_GMAC1")]
     pub clock_gmac1: RW<NormalModuleClock>,
-    _reserved18: [u8; 0x14],
+    _reserved17: [u8; 0x14],
     /// XSPI clock register (`CLK_XSPI`).
     #[doc(alias = "CLK_XSPI")]
     pub clock_xspi: RW<NormalModuleClock>,
@@ -165,22 +167,22 @@ pub struct RegisterBlock {
     /// SDMC2 clock register (`CLK_SDMC2`).
     #[doc(alias = "CLK_SDMC2")]
     pub clock_sdmc2: RW<NormalModuleClock>,
-    _reserved19: [u8; 0x14],
+    _reserved18: [u8; 0x14],
     /// CORDIC clock register (`CLK_CORDIC`).
     #[doc(alias = "CLK_CORDIC")]
     pub clock_cordic: RW<SimpleModule2Clock>,
     /// HCL clock register (`CLK_HCL`).
     #[doc(alias = "CLK_HCL")]
     pub clock_hcl: RW<SimpleModule2Clock>,
-    _reserved20: [u8; 0x8],
+    _reserved19: [u8; 0x8],
     /// PBUS clock register (`CLK_PBUS`).
     #[doc(alias = "CLK_PBUS")]
     pub clock_pbus: RW<SimpleModule2Clock>,
-    _reserved21: [u8; 0x35C],
+    _reserved20: [u8; 0x35C],
     /// SYSCFG clock register (`CLK_SYSCFG`).
     #[doc(alias = "CLK_SYSCFG")]
     pub clock_syscfg: RW<SimpleModule1Clock>,
-    _reserved22: [u8; 0xC],
+    _reserved21: [u8; 0xC],
     /// SPI_ENC clock register (`CLK_SPI_ENC`).
     #[doc(alias = "CLK_SPI_ENC")]
     pub clock_spi_enc: RW<SimpleModule5Clock>,
@@ -200,7 +202,14 @@ pub struct RegisterBlock {
     /// I2S1 clock register (`CLK_I2S1`).
     #[doc(alias = "CLK_I2S1")]
     pub clock_i2s1: RW<SimpleModule5Clock>,
-    _reserved23: [u8; 0x14],
+    _reserved22: [u8; 0x4],
+    /// SAI clock register (`CLK_SAI`).
+    #[doc(alias = "CLK_SAI")]
+    pub clock_sai: RW<NormalModuleClock>,
+    /// AUDIO clock register (`CLK_AUDIO`).
+    #[doc(alias = "CLK_AUDIO")]
+    pub clock_audio: RW<NormalModuleClock>,
+    _reserved23: [u8; 0x8],
     /// GPIO clock register (`CLK_GPIO`).
     #[doc(alias = "CLK_GPIO")]
     pub clock_gpio: RW<SimpleModule2Clock>,
@@ -379,7 +388,7 @@ impl PllGeneral {
             val < 32,
             "Value out of bounds for PLL_ICP (expected 0..=31)"
         );
-        Self(self.0 & !Self::PLL_ICP | (Self::PLL_ICP & ((val as u32) << 24)))
+        Self((self.0 & !Self::PLL_ICP) | (Self::PLL_ICP & ((val as u32) << 24)))
     }
     /// Get adjustment of pll loop bandwidth.
     #[inline]
@@ -2221,6 +2230,7 @@ mod tests {
         assert_eq!(offset_of!(RegisterBlock, clock_audio_serial), 0x230);
         assert_eq!(offset_of!(RegisterBlock, clock_pwmcs_sdfm), 0x240);
         assert_eq!(offset_of!(RegisterBlock, clock_dma), 0x410);
+        assert_eq!(offset_of!(RegisterBlock, clock_dce), 0x414);
         assert_eq!(offset_of!(RegisterBlock, clock_ce), 0x418);
         assert_eq!(offset_of!(RegisterBlock, clock_usb_dev), 0x41C);
         assert_eq!(offset_of!(RegisterBlock, clock_usb_host0), 0x420);
@@ -2247,6 +2257,8 @@ mod tests {
         assert_eq!(offset_of!(RegisterBlock, clock_mtop), 0x81C);
         assert_eq!(offset_of!(RegisterBlock, clock_i2s0), 0x820);
         assert_eq!(offset_of!(RegisterBlock, clock_i2s1), 0x824);
+        assert_eq!(offset_of!(RegisterBlock, clock_sai), 0x82C);
+        assert_eq!(offset_of!(RegisterBlock, clock_audio), 0x830);
         assert_eq!(offset_of!(RegisterBlock, clock_gpio), 0x83C);
         assert_eq!(offset_of!(RegisterBlock, clock_uart0), 0x840);
         assert_eq!(offset_of!(RegisterBlock, clock_uart1), 0x844);
