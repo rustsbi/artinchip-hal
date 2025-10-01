@@ -1397,6 +1397,10 @@ mod tests {
         val = val.pause_ch();
         assert!(val.is_ch_paused());
         assert_eq!(val.0, 0x0000_0001);
+
+        val = val.resume_ch();
+        assert!(!val.is_ch_paused());
+        assert_eq!(val.0, 0x0000_0000);
     }
 
     #[test]

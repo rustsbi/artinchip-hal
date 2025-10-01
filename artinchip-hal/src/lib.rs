@@ -2,6 +2,7 @@
 #![no_std]
 
 pub mod axi_cfg;
+pub mod ce;
 pub mod cmu;
 pub mod dma;
 pub mod gpio;
