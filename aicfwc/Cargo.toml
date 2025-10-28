@@ -1,5 +1,6 @@
 [package]
-name = "artinchip-hal"
+name = "aicfwc"
+description = "Artinchip firmware converter"
 version = "0.0.0"
 edition = "2024"
 authors = [
@@ -8,13 +9,6 @@ authors = [
 ]
 
 [dependencies]
-volatile-register = "0.2.2"
-uart16550 = "0.0.1"
-embedded-hal = "1.0.0"
-
-[features]
-d12x = []
-d13x = []
-d21x = []
-g73x = []
-m6800 = []
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+md-5 = "0.10.6"

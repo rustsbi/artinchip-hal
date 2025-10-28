@@ -1,0 +1,16 @@
+[package]
+name = "pbp-blinky"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+panic-halt = "1.0.0"
+uart16550 = "0.0.1"
+artinchip-hal = { version = "0.0.0", path = "../../../artinchip-hal" }
+artinchip-rt = { version = "0.0.0", path = "../../../artinchip-rt" }
+riscv = "0.15.0"
+
+[features]
+default = ["d13x"]
+d13x = ["artinchip-rt/d13x", "artinchip-hal/d13x"]
+# TODO other features for all the chips.
