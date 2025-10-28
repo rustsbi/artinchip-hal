@@ -2,5 +2,7 @@
 members = [
     "artinchip-rt",
     "artinchip-hal",
+    "aicfwc",
+    "examples/pbp/pbp-blinky",
 ]
 resolver = "3"

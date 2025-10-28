@@ -1,5 +1,5 @@
 [package]
-name = "artinchip-hal"
+name = "artinchip-rt-macros"
 version = "0.0.0"
 edition = "2024"
 authors = [
@@ -7,14 +7,13 @@ authors = [
     "Chongbing Yu <nanahigh@openatom.club>",
 ]
 
-[dependencies]
-volatile-register = "0.2.2"
-uart16550 = "0.0.1"
-embedded-hal = "1.0.0"
+[lib]
+proc-macro = true
 
-[features]
-d12x = []
-d13x = []
-d21x = []
-g73x = []
-m6800 = []
+[dependencies]
+quote = "1.0"
+proc-macro2 = "1.0"
+
+[dependencies.syn]
+version = "1.0"
+features = ["extra-traits", "full"]

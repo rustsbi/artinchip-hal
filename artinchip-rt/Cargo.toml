@@ -2,8 +2,14 @@
 name = "artinchip-rt"
 version = "0.0.0"
 edition = "2024"
+authors = [
+    "Zhouqi Jiang <luojia@openatom.club>",
+    "Chongbing Yu <nanahigh@openatom.club>",
+]
 
 [dependencies]
+artinchip-rt-macros = { version = "0.0.0", path = "macros" }
+artinchip-hal = { version = "0.0.0", path = "../artinchip-hal" }
 
 [features]
 d12x = []
