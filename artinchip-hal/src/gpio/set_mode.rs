@@ -4,7 +4,7 @@ use super::register::{GpioGroup, PinConfig};
 
 /// Internal function to set GPIO pad mode.
 #[inline]
-pub fn set_mode<'a, T, U>(mut value: T) -> U
+pub fn set_mode<'a, T, U>(value: T, pin_config: PinConfig) -> U
 where
     T: WithinGpioGroup<'a>,
     U: FromRegisters<'a>,
@@ -12,17 +12,12 @@ where
     // take ownership of pad
     let number = value.gpio_number();
     let regs = value.gpio_group();
-    unsafe { write_mode::<T, U>(&mut value) };
+    // set pin configuration
+    unsafe {
+        regs.pin_config[number as usize].write(pin_config);
+    }
     // return ownership of pad
     unsafe { U::from_gpio(number, regs) }
-}
-
-#[inline]
-unsafe fn write_mode<'a, T: WithinGpioGroup<'a>, U: FromRegisters<'a>>(value: &mut T) {
-    let regs = value.gpio_group();
-    let number = value.gpio_number();
-    // apply configuration
-    unsafe { regs.pin_config[number as usize].write(U::CONFIG) };
 }
 
 pub trait WithinGpioGroup<'a> {
@@ -31,6 +26,5 @@ pub trait WithinGpioGroup<'a> {
 }
 
 pub trait FromRegisters<'a> {
-    const CONFIG: PinConfig;
     unsafe fn from_gpio(number: u8, regs: &'a GpioGroup) -> Self;
 }

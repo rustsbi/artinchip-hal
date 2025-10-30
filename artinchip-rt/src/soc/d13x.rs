@@ -724,15 +724,55 @@ macro_rules! pad_ext {
     ($gpio:ident) => {
         impl<'a, const N: u8> artinchip_hal::gpio::PadExt<'a> for &'a mut GpioPad<$gpio, N> {
             #[inline]
-            fn into_output(self) -> artinchip_hal::gpio::Output<'a> {
-                unsafe { artinchip_hal::gpio::Output::__new(N, &*$gpio::ptr()) }
+            fn into_pull_up_output(self) -> artinchip_hal::gpio::Output<'a> {
+                unsafe { artinchip_hal::gpio::Output::into_pull_up_output(N, &*$gpio::ptr()) }
+            }
+            #[inline]
+            fn into_pull_down_output(self) -> artinchip_hal::gpio::Output<'a> {
+                unsafe { artinchip_hal::gpio::Output::into_pull_down_output(N, &*$gpio::ptr()) }
+            }
+            #[inline]
+            fn into_floating_output(self) -> artinchip_hal::gpio::Output<'a> {
+                unsafe { artinchip_hal::gpio::Output::into_floating_output(N, &*$gpio::ptr()) }
+            }
+            #[inline]
+            fn into_pull_up_input(self) -> artinchip_hal::gpio::Input<'a> {
+                unsafe { artinchip_hal::gpio::Input::into_pull_up_input(N, &*$gpio::ptr()) }
+            }
+            #[inline]
+            fn into_pull_down_input(self) -> artinchip_hal::gpio::Input<'a> {
+                unsafe { artinchip_hal::gpio::Input::into_pull_down_input(N, &*$gpio::ptr()) }
+            }
+            #[inline]
+            fn into_floating_input(self) -> artinchip_hal::gpio::Input<'a> {
+                unsafe { artinchip_hal::gpio::Input::into_floating_input(N, &*$gpio::ptr()) }
             }
         }
 
         impl<const N: u8> artinchip_hal::gpio::PadExt<'static> for GpioPad<$gpio, N> {
             #[inline]
-            fn into_output(self) -> artinchip_hal::gpio::Output<'static> {
-                unsafe { artinchip_hal::gpio::Output::__new(N, &*$gpio::ptr()) }
+            fn into_pull_up_output(self) -> artinchip_hal::gpio::Output<'static> {
+                unsafe { artinchip_hal::gpio::Output::into_pull_up_output(N, &*$gpio::ptr()) }
+            }
+            #[inline]
+            fn into_pull_down_output(self) -> artinchip_hal::gpio::Output<'static> {
+                unsafe { artinchip_hal::gpio::Output::into_pull_down_output(N, &*$gpio::ptr()) }
+            }
+            #[inline]
+            fn into_floating_output(self) -> artinchip_hal::gpio::Output<'static> {
+                unsafe { artinchip_hal::gpio::Output::into_floating_output(N, &*$gpio::ptr()) }
+            }
+            #[inline]
+            fn into_pull_up_input(self) -> artinchip_hal::gpio::Input<'static> {
+                unsafe { artinchip_hal::gpio::Input::into_pull_up_input(N, &*$gpio::ptr()) }
+            }
+            #[inline]
+            fn into_pull_down_input(self) -> artinchip_hal::gpio::Input<'static> {
+                unsafe { artinchip_hal::gpio::Input::into_pull_down_input(N, &*$gpio::ptr()) }
+            }
+            #[inline]
+            fn into_floating_input(self) -> artinchip_hal::gpio::Input<'static> {
+                unsafe { artinchip_hal::gpio::Input::into_floating_input(N, &*$gpio::ptr()) }
             }
         }
     };
