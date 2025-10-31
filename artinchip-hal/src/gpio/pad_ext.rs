@@ -17,4 +17,6 @@ pub trait PadExt<'a> {
     fn into_pull_down_input(self) -> Input<'a>;
     /// Configures the pad to operate as a floating input pad.
     fn into_floating_input(self) -> Input<'a>;
+    /// Configures the pad to operate as a function mode pad with function `F`.
+    fn into_function<const F: u8>(self) -> super::function::Function<'a, F>;
 }

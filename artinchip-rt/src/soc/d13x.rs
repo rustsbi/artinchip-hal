@@ -725,54 +725,62 @@ macro_rules! pad_ext {
         impl<'a, const N: u8> artinchip_hal::gpio::PadExt<'a> for &'a mut GpioPad<$gpio, N> {
             #[inline]
             fn into_pull_up_output(self) -> artinchip_hal::gpio::Output<'a> {
-                unsafe { artinchip_hal::gpio::Output::into_pull_up_output(N, &*$gpio::ptr()) }
+                unsafe { artinchip_hal::gpio::Output::new_pull_up(N, &*$gpio::ptr()) }
             }
             #[inline]
             fn into_pull_down_output(self) -> artinchip_hal::gpio::Output<'a> {
-                unsafe { artinchip_hal::gpio::Output::into_pull_down_output(N, &*$gpio::ptr()) }
+                unsafe { artinchip_hal::gpio::Output::new_pull_down(N, &*$gpio::ptr()) }
             }
             #[inline]
             fn into_floating_output(self) -> artinchip_hal::gpio::Output<'a> {
-                unsafe { artinchip_hal::gpio::Output::into_floating_output(N, &*$gpio::ptr()) }
+                unsafe { artinchip_hal::gpio::Output::new_floating(N, &*$gpio::ptr()) }
             }
             #[inline]
             fn into_pull_up_input(self) -> artinchip_hal::gpio::Input<'a> {
-                unsafe { artinchip_hal::gpio::Input::into_pull_up_input(N, &*$gpio::ptr()) }
+                unsafe { artinchip_hal::gpio::Input::new_pull_up(N, &*$gpio::ptr()) }
             }
             #[inline]
             fn into_pull_down_input(self) -> artinchip_hal::gpio::Input<'a> {
-                unsafe { artinchip_hal::gpio::Input::into_pull_down_input(N, &*$gpio::ptr()) }
+                unsafe { artinchip_hal::gpio::Input::new_pull_down(N, &*$gpio::ptr()) }
             }
             #[inline]
             fn into_floating_input(self) -> artinchip_hal::gpio::Input<'a> {
-                unsafe { artinchip_hal::gpio::Input::into_floating_input(N, &*$gpio::ptr()) }
+                unsafe { artinchip_hal::gpio::Input::new_floating(N, &*$gpio::ptr()) }
+            }
+            #[inline]
+            fn into_function<const F: u8>(self) -> artinchip_hal::gpio::Function<'a, F> {
+                unsafe { artinchip_hal::gpio::Function::new_with_func(N, &*$gpio::ptr()) }
             }
         }
 
         impl<const N: u8> artinchip_hal::gpio::PadExt<'static> for GpioPad<$gpio, N> {
             #[inline]
             fn into_pull_up_output(self) -> artinchip_hal::gpio::Output<'static> {
-                unsafe { artinchip_hal::gpio::Output::into_pull_up_output(N, &*$gpio::ptr()) }
+                unsafe { artinchip_hal::gpio::Output::new_pull_up(N, &*$gpio::ptr()) }
             }
             #[inline]
             fn into_pull_down_output(self) -> artinchip_hal::gpio::Output<'static> {
-                unsafe { artinchip_hal::gpio::Output::into_pull_down_output(N, &*$gpio::ptr()) }
+                unsafe { artinchip_hal::gpio::Output::new_pull_down(N, &*$gpio::ptr()) }
             }
             #[inline]
             fn into_floating_output(self) -> artinchip_hal::gpio::Output<'static> {
-                unsafe { artinchip_hal::gpio::Output::into_floating_output(N, &*$gpio::ptr()) }
+                unsafe { artinchip_hal::gpio::Output::new_floating(N, &*$gpio::ptr()) }
             }
             #[inline]
             fn into_pull_up_input(self) -> artinchip_hal::gpio::Input<'static> {
-                unsafe { artinchip_hal::gpio::Input::into_pull_up_input(N, &*$gpio::ptr()) }
+                unsafe { artinchip_hal::gpio::Input::new_pull_up(N, &*$gpio::ptr()) }
             }
             #[inline]
             fn into_pull_down_input(self) -> artinchip_hal::gpio::Input<'static> {
-                unsafe { artinchip_hal::gpio::Input::into_pull_down_input(N, &*$gpio::ptr()) }
+                unsafe { artinchip_hal::gpio::Input::new_pull_down(N, &*$gpio::ptr()) }
             }
             #[inline]
             fn into_floating_input(self) -> artinchip_hal::gpio::Input<'static> {
-                unsafe { artinchip_hal::gpio::Input::into_floating_input(N, &*$gpio::ptr()) }
+                unsafe { artinchip_hal::gpio::Input::new_floating(N, &*$gpio::ptr()) }
+            }
+            #[inline]
+            fn into_function<const F: u8>(self) -> artinchip_hal::gpio::Function<'static, F> {
+                unsafe { artinchip_hal::gpio::Function::new_with_func(N, &*$gpio::ptr()) }
             }
         }
     };

@@ -14,60 +14,49 @@ pub struct Output<'a> {
 }
 
 impl<'a> Output<'a> {
+    const PIN_CONFIG: PinConfig = PinConfig::zeroed()
+        .enable_general_output()
+        .disable_general_input()
+        .set_pin_func(1)
+        .set_drive_strength(PinDriveStrength::Level3);
+
     // Macro internal function for ROM runtime; DO NOT USE.
     #[doc(hidden)]
     #[inline]
     pub unsafe fn __new(number: u8, regs: &'a GpioGroup, pin_config: PinConfig) -> Self {
         set_mode(Self { number, regs }, pin_config)
     }
+
     /// Configures the pin to operate as a pull up output.
     #[inline]
-    pub fn into_pull_up_output(number: u8, regs: &'a GpioGroup) -> Self {
-        unsafe {
-            Self::__new(
-                number,
-                regs,
-                PinConfig::zeroed()
-                    .enable_general_output()
-                    .disable_general_input()
-                    .set_pin_func(1)
-                    .set_pin_pull(PinPull::PullUp)
-                    .set_drive_strength(PinDriveStrength::Level3),
-            )
-        }
+    pub fn new_pull_up(number: u8, regs: &'a GpioGroup) -> Self {
+        unsafe { Self::__new(number, regs, Self::PIN_CONFIG.set_pin_pull(PinPull::PullUp)) }
     }
+
     /// Configures the pin to operate as a pull down output.
     #[inline]
-    pub fn into_pull_down_output(number: u8, regs: &'a GpioGroup) -> Self {
+    pub fn new_pull_down(number: u8, regs: &'a GpioGroup) -> Self {
         unsafe {
             Self::__new(
                 number,
                 regs,
-                PinConfig::zeroed()
-                    .enable_general_output()
-                    .disable_general_input()
-                    .set_pin_func(1)
-                    .set_pin_pull(PinPull::PullDown)
-                    .set_drive_strength(PinDriveStrength::Level3),
+                Self::PIN_CONFIG.set_pin_pull(PinPull::PullDown),
             )
         }
     }
+
     /// Configures the pin to operate as a floating output.
     #[inline]
-    pub fn into_floating_output(number: u8, regs: &'a GpioGroup) -> Self {
+    pub fn new_floating(number: u8, regs: &'a GpioGroup) -> Self {
         unsafe {
             Self::__new(
                 number,
                 regs,
-                PinConfig::zeroed()
-                    .enable_general_output()
-                    .disable_general_input()
-                    .set_pin_func(1)
-                    .set_pin_pull(PinPull::Disabled)
-                    .set_drive_strength(PinDriveStrength::Level3),
+                Self::PIN_CONFIG.set_pin_pull(PinPull::Disabled),
             )
         }
     }
+
     /// Configures the pin drive strength.
     #[inline]
     pub fn set_drive_strength(&mut self, strength: PinDriveStrength) {
