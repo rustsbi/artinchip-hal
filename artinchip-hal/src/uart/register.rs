@@ -10,57 +10,57 @@ pub struct RegisterBlock {
     /// Standard UART 16550 registers.
     ///
     /// Includes the transmit and receive buffers, line control, and modem control registers.
-    uart16550: Uart16550<u32>,
+    pub uart16550: Uart16550<u32>,
     /// UART scratch register (`UART_SCH`).
     #[doc(alias = "UART_SCH")]
-    sch: RW<UartScratch>,
+    pub sch: RW<UartScratch>,
     _reserved0: [u8; 0x5C],
     /// UART status register (`UART_USR`).
     #[doc(alias = "UART_USR")]
-    usr: RO<UartStatus>,
+    pub usr: RO<UartStatus>,
     /// UART transmit FIFO level register (`UART_TFL`).
     #[doc(alias = "UART_TFL")]
-    tfl: RO<TransmitFifoLevel>,
+    pub tfl: RO<TransmitFifoLevel>,
     /// UART receive FIFO level register (`UART_RFL`).
     #[doc(alias = "UART_RFL")]
-    rfl: RO<ReceiveFifoLevel>,
+    pub rfl: RO<ReceiveFifoLevel>,
     /// UART DMA handshake configuration register (`UART_HSK`).
     #[doc(alias = "UART_HSK")]
-    hsk: RW<DmaHandshakeConfig>,
+    pub hsk: RW<DmaHandshakeConfig>,
     _reserved1: [u8; 0x18],
     /// UART halt transmit register (`UART_HALT`).
     #[doc(alias = "UART_HALT")]
-    halt: RW<HaltTx>,
+    pub halt: RW<HaltTx>,
     _reserved2: [u8; 0x8],
     /// UART debug dll register (`UART_DBG_DLL`).
     #[doc(alias = "UART_DBG_DLL")]
-    dbg_dll: RW<DebugDll>,
+    pub dbg_dll: RW<DebugDll>,
     /// UART debug dlh register (`UART_DBG_DLH`).
     #[doc(alias = "UART_DBG_DLH")]
-    dbg_dlh: RW<DebugDlh>,
+    pub dbg_dlh: RW<DebugDlh>,
     /// UART RS485 DE time register (`UART_485_DE`).
     #[doc(alias = "UART_485_DE")]
-    rs485_de: RW<Rs485DeTime>,
+    pub rs485_de: RW<Rs485DeTime>,
     _reserved3: [u8; 0x4],
     /// UART RS485 control and status register (`UART_485_CTL`).
     #[doc(alias = "UART_485_CTL")]
-    rs485_ctl: RW<Rs485Control>,
+    pub rs485_ctl: RW<Rs485Control>,
     /// UART RS485 address match register (`RS485_ADDR_MATCH`).
     #[doc(alias = "RS485_ADDR_MATCH")]
-    rs485_addr_match: RW<Rs485AddressMatch>,
+    pub rs485_addr_match: RW<Rs485AddressMatch>,
     /// UART RS485 bus idle check register (`BUS_IDLE_CHK`).
     #[doc(alias = "BUS_IDLE_CHK")]
-    rs485_bus_idle_check: RW<Rs485BusIdleCheck>,
+    pub rs485_bus_idle_check: RW<Rs485BusIdleCheck>,
     /// UART transmit delay register (`TX_DLY`).
     #[doc(alias = "TX_DLY")]
-    tx_delay: RW<TransmitDelay>,
+    pub tx_delay: RW<TransmitDelay>,
     /// UART debug register (`UART_DBR`).
     #[doc(alias = "UART_DBR")]
-    debug: WO<DebugRegister>,
+    pub debug: WO<DebugRegister>,
     _reserved4: [u8; 0x28],
     /// UART version register (`UART_VERSION`).
     #[doc(alias = "UART_VERSION")]
-    version: RO<Version>,
+    pub version: RO<Version>,
 }
 
 /// UART scratch register.
