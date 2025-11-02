@@ -1,17 +1,16 @@
 //! Function mode GPIO pad implementation.
 
 use super::{
-    register::{GpioGroup, PinConfig, PinDriveStrength, PinPull},
-    set_mode::{FromRegisters, WithinGpioGroup, set_mode},
+    mode::{FromRegisters, WithinGpioGroup, set_mode},
+    register::{GpioGroup, PinConfig, PinDriveStrength, PinPull, RegisterBlock},
 };
 
 /// Function mode GPIO pad.
-pub struct Function<'a, const F: u8> {
-    number: u8,
-    regs: &'a GpioGroup,
+pub struct Function<'a, const G: char, const N: u8, const F: u8> {
+    regs: &'a RegisterBlock,
 }
 
-impl<'a, const F: u8> Function<'a, F> {
+impl<'a, const G: char, const N: u8, const F: u8> Function<'a, G, N, F> {
     const PIN_CONFIG: PinConfig = PinConfig::zeroed()
         .disable_general_output()
         .disable_general_input()
@@ -22,21 +21,21 @@ impl<'a, const F: u8> Function<'a, F> {
     // Macro internal function for ROM runtime; DO NOT USE.
     #[doc(hidden)]
     #[inline]
-    pub unsafe fn __new(number: u8, regs: &'a GpioGroup, pin_config: PinConfig) -> Self {
-        set_mode(Self { number, regs }, pin_config)
+    pub unsafe fn __new(regs: &'a RegisterBlock, pin_config: PinConfig) -> Self {
+        set_mode(Self { regs }, pin_config)
     }
 
     /// Configures the pin to operate as a function mode pin.
     #[inline]
-    pub fn new_with_func(number: u8, regs: &'a GpioGroup) -> Self {
-        unsafe { Self::__new(number, regs, Self::PIN_CONFIG) }
+    pub fn new_with_func(regs: &'a RegisterBlock) -> Self {
+        unsafe { Self::__new(regs, Self::PIN_CONFIG) }
     }
 
     /// Configures the pin drive strength.
     #[inline]
     pub fn set_drive_strength(&mut self, strength: PinDriveStrength) {
         unsafe {
-            self.regs.pin_config[self.number as usize].modify(|r| r.set_drive_strength(strength));
+            self.group().pin_config[N as usize].modify(|r| r.set_drive_strength(strength));
         }
     }
 
@@ -44,26 +43,31 @@ impl<'a, const F: u8> Function<'a, F> {
     #[inline]
     pub fn set_pull(&mut self, pull: PinPull) {
         unsafe {
-            self.regs.pin_config[self.number as usize].modify(|r| r.set_pin_pull(pull));
+            self.group().pin_config[N as usize].modify(|r| r.set_pin_pull(pull));
         }
     }
 }
 
-impl<'a, const F: u8> embedded_hal::digital::ErrorType for Function<'a, F> {
+impl<'a, const G: char, const N: u8, const F: u8> embedded_hal::digital::ErrorType
+    for Function<'a, G, N, F>
+{
     type Error = core::convert::Infallible;
 }
 
-impl<'a, const F: u8> WithinGpioGroup<'a> for Function<'a, F> {
-    fn gpio_number(&self) -> u8 {
-        self.number
+impl<'a, const G: char, const N: u8, const F: u8> WithinGpioGroup<'a, G> for Function<'a, G, N, F> {
+    #[inline]
+    fn group(&self) -> &'a GpioGroup {
+        &self.regs.groups[self.group_index()]
     }
-    fn gpio_group(&self) -> &'a GpioGroup {
+    #[inline]
+    fn block(&self) -> &'a RegisterBlock {
         self.regs
     }
 }
 
-impl<'a, const F: u8> FromRegisters<'a> for Function<'a, F> {
-    unsafe fn from_gpio(number: u8, regs: &'a GpioGroup) -> Self {
-        Function { number, regs }
+impl<'a, const N: u8, const G: char, const F: u8> FromRegisters<'a, N> for Function<'a, G, N, F> {
+    #[inline]
+    unsafe fn from_gpio(regs: &'a RegisterBlock) -> Self {
+        Self { regs }
     }
 }

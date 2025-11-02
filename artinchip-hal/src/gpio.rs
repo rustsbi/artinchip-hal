@@ -2,10 +2,10 @@
 
 mod function;
 mod input;
+mod mode;
 mod output;
 mod pad_ext;
 mod register;
-mod set_mode;
 
 pub use function::Function;
 pub use input::Input;

@@ -1,19 +1,19 @@
 //! Output GPIO pad implementation.
 
 use super::{
+    mode::{FromRegisters, WithinGpioGroup, set_mode},
     register::{
         GpioGroup, OutputClear, OutputSet, OutputToggle, PinConfig, PinDriveStrength, PinPull,
+        RegisterBlock,
     },
-    set_mode::{FromRegisters, WithinGpioGroup, set_mode},
 };
 
 /// Output mode GPIO pad.
-pub struct Output<'a> {
-    number: u8,
-    regs: &'a GpioGroup,
+pub struct Output<'a, const G: char, const N: u8> {
+    regs: &'a RegisterBlock,
 }
 
-impl<'a> Output<'a> {
+impl<'a, const G: char, const N: u8> Output<'a, G, N> {
     const PIN_CONFIG: PinConfig = PinConfig::zeroed()
         .enable_general_output()
         .disable_general_input()
@@ -23,108 +23,96 @@ impl<'a> Output<'a> {
     // Macro internal function for ROM runtime; DO NOT USE.
     #[doc(hidden)]
     #[inline]
-    pub unsafe fn __new(number: u8, regs: &'a GpioGroup, pin_config: PinConfig) -> Self {
-        set_mode(Self { number, regs }, pin_config)
+    pub unsafe fn __new(regs: &'a RegisterBlock, pin_config: PinConfig) -> Self {
+        set_mode(Self { regs }, pin_config)
     }
 
     /// Configures the pin to operate as a pull up output.
     #[inline]
-    pub fn new_pull_up(number: u8, regs: &'a GpioGroup) -> Self {
-        unsafe { Self::__new(number, regs, Self::PIN_CONFIG.set_pin_pull(PinPull::PullUp)) }
+    pub fn new_pull_up(regs: &'a RegisterBlock) -> Self {
+        unsafe { Self::__new(regs, Self::PIN_CONFIG.set_pin_pull(PinPull::PullUp)) }
     }
 
     /// Configures the pin to operate as a pull down output.
     #[inline]
-    pub fn new_pull_down(number: u8, regs: &'a GpioGroup) -> Self {
-        unsafe {
-            Self::__new(
-                number,
-                regs,
-                Self::PIN_CONFIG.set_pin_pull(PinPull::PullDown),
-            )
-        }
+    pub fn new_pull_down(regs: &'a RegisterBlock) -> Self {
+        unsafe { Self::__new(regs, Self::PIN_CONFIG.set_pin_pull(PinPull::PullDown)) }
     }
 
     /// Configures the pin to operate as a floating output.
     #[inline]
-    pub fn new_floating(number: u8, regs: &'a GpioGroup) -> Self {
-        unsafe {
-            Self::__new(
-                number,
-                regs,
-                Self::PIN_CONFIG.set_pin_pull(PinPull::Disabled),
-            )
-        }
+    pub fn new_floating(regs: &'a RegisterBlock) -> Self {
+        unsafe { Self::__new(regs, Self::PIN_CONFIG.set_pin_pull(PinPull::Disabled)) }
     }
 
     /// Configures the pin drive strength.
     #[inline]
     pub fn set_drive_strength(&mut self, strength: PinDriveStrength) {
         unsafe {
-            self.regs.pin_config[self.number as usize].modify(|r| r.set_drive_strength(strength));
+            self.group().pin_config[N as usize].modify(|r| r.set_drive_strength(strength));
         }
     }
 }
 
-impl<'a> embedded_hal::digital::ErrorType for Output<'a> {
+impl<'a, const G: char, const N: u8> embedded_hal::digital::ErrorType for Output<'a, G, N> {
     type Error = core::convert::Infallible;
 }
 
-impl<'a> embedded_hal::digital::OutputPin for Output<'a> {
+impl<'a, const G: char, const N: u8> embedded_hal::digital::OutputPin for Output<'a, G, N> {
     #[inline]
     fn set_low(&mut self) -> Result<(), Self::Error> {
         unsafe {
-            self.regs
+            self.group()
                 .output_clear
-                .write(OutputClear::default().clear_output(self.number as usize));
+                .write(OutputClear::default().clear_output(N as usize));
         }
         Ok(())
     }
     #[inline]
     fn set_high(&mut self) -> Result<(), Self::Error> {
         unsafe {
-            self.regs
+            self.group()
                 .output_set
-                .write(OutputSet::default().set_output(self.number as usize));
+                .write(OutputSet::default().set_output(N as usize));
         }
         Ok(())
     }
 }
 
-impl<'a> embedded_hal::digital::StatefulOutputPin for Output<'a> {
+impl<'a, const G: char, const N: u8> embedded_hal::digital::StatefulOutputPin for Output<'a, G, N> {
     #[inline]
     fn is_set_high(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.regs.output_config.read().is_high(self.number as usize))
+        Ok(self.group().output_config.read().is_high(N as usize))
     }
     #[inline]
     fn is_set_low(&mut self) -> Result<bool, Self::Error> {
-        Ok(self.regs.output_config.read().is_low(self.number as usize))
+        Ok(self.group().output_config.read().is_low(N as usize))
     }
     #[inline]
     fn toggle(&mut self) -> Result<(), Self::Error> {
         unsafe {
-            self.regs
+            self.group()
                 .output_toggle
-                .write(OutputToggle::default().toggle_output(self.number as usize));
+                .write(OutputToggle::default().toggle_output(N as usize));
         }
         Ok(())
     }
 }
 
-impl<'a> WithinGpioGroup<'a> for Output<'a> {
+impl<'a, const G: char, const N: u8> WithinGpioGroup<'a, G> for Output<'a, G, N> {
     #[inline]
-    fn gpio_number(&self) -> u8 {
-        self.number
+    fn group(&self) -> &'a GpioGroup {
+        &self.regs.groups[self.group_index()]
     }
     #[inline]
-    fn gpio_group(&self) -> &'a GpioGroup {
+    fn block(&self) -> &'a RegisterBlock {
         self.regs
     }
 }
 
-impl<'a> FromRegisters<'a> for Output<'a> {
+impl<'a, const N: u8, const G: char> FromRegisters<'a, N> for Output<'a, G, N> {
     #[inline]
-    unsafe fn from_gpio(number: u8, regs: &'a GpioGroup) -> Self {
-        Self { number, regs }
+    unsafe fn from_gpio(regs: &'a RegisterBlock) -> Self {
+        Self { regs }
     }
 }
