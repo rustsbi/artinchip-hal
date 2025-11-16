@@ -112,7 +112,7 @@ fn verify_checksum(buf: &[u8], target: u32) -> bool {
     (sum as u32) == target
 }
 
-/// Pack PBP data into a complete Artinchip boot image format
+/// Pack PBP data into a complete ArtInChip boot image format
 /// Format: HEAD1 + HEAD2 + DATA1 (PBP) + DATA2 (empty) + SIGN (MD5)
 fn pack_pbp(pbp_data: &[u8]) -> Result<Vec<u8>> {
     // Constants

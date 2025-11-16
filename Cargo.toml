@@ -4,5 +4,6 @@ members = [
     "artinchip-hal",
     "aicfwc",
     "examples/pbp/pbp-blinky",
+    "examples/pbp/pbp-hello-world",
 ]
 resolver = "3"

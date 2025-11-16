@@ -74,7 +74,7 @@ impl UartScratch {
     /// Set the scratch value (`SCRATCH_REG`).
     #[doc(alias = "SCRATCH_REG")]
     #[inline]
-    pub fn set_scratch_val(self, val: u8) -> Self {
+    pub const fn set_scratch_val(self, val: u8) -> Self {
         Self((self.0 & !Self::SCRATCH_REG) | (Self::SCRATCH_REG & (val as u32)))
     }
     /// Get the scratch value.
@@ -181,12 +181,12 @@ impl DmaHandshakeConfig {
     /// Set the dma handshake mode (`HSK`).
     #[doc(alias = "HSK")]
     #[inline]
-    pub fn set_handshake_mode(self, mode: DmaHandshakeMode) -> Self {
+    pub const fn set_handshake_mode(self, mode: DmaHandshakeMode) -> Self {
         Self((self.0 & !Self::HSK) | (Self::HSK & (mode as u32)))
     }
     /// Get the dma handshake mode.
     #[inline]
-    pub fn handshake_mode(self) -> DmaHandshakeMode {
+    pub const fn handshake_mode(self) -> DmaHandshakeMode {
         match self.0 & Self::HSK {
             0xA5 => DmaHandshakeMode::WaitCycle,
             0xE5 => DmaHandshakeMode::Handshake,
@@ -203,6 +203,8 @@ pub struct HaltTx(u32);
 impl HaltTx {
     const DMA_PTE_RX: u32 = 0x1 << 7;
     const DMA_PTE_TX: u32 = 0x1 << 6;
+    const HALT_CHANGE_UPDATE: u32 = 0x1 << 2;
+    const HALT_CHCFG_AT_BUSY: u32 = 0x1 << 1;
     const HALT_TX: u32 = 0x1;
 
     /// Set the DMA_PTE_RX bit (`DMA_PTE_RX`).
@@ -213,7 +215,7 @@ impl HaltTx {
     /// - Otherwise: sends DRQ once receive data is valid
     #[doc(alias = "DMA_PTE_RX")]
     #[inline]
-    pub fn set_dma_pte_rx(self, enable: bool) -> Self {
+    pub const fn set_dma_pte_rx(self, enable: bool) -> Self {
         Self(if enable {
             self.0 | Self::DMA_PTE_RX
         } else {
@@ -222,7 +224,7 @@ impl HaltTx {
     }
     /// Check if the DMA_PTE_RX bit is set.
     #[inline]
-    pub fn is_dma_pte_rx_set(self) -> bool {
+    pub const fn is_dma_pte_rx_set(self) -> bool {
         (self.0 & Self::DMA_PTE_RX) != 0
     }
     /// Set the DMA_PTE_TX bit (`DMA_PTE_TX`).
@@ -237,7 +239,7 @@ impl HaltTx {
     ///     - If DMA_PTE_TX is set to 0, sends DMA request when FIFO is empty.
     #[doc(alias = "DMA_PTE_TX")]
     #[inline]
-    pub fn set_dma_pte_tx(self, enable: bool) -> Self {
+    pub const fn set_dma_pte_tx(self, enable: bool) -> Self {
         Self(if enable {
             self.0 | Self::DMA_PTE_TX
         } else {
@@ -246,15 +248,33 @@ impl HaltTx {
     }
     /// Check if the DMA_PTE_TX bit is set.
     #[inline]
-    pub fn is_dma_pte_tx_set(self) -> bool {
+    pub const fn is_dma_pte_tx_set(self) -> bool {
         (self.0 & Self::DMA_PTE_TX) != 0
+    }
+    /// Set halt change update (`HALT_CHANGE_UPDATE`).
+    #[inline]
+    pub const fn set_halt_change_update(self, enable: bool) -> Self {
+        if enable {
+            Self(self.0 | Self::HALT_CHANGE_UPDATE)
+        } else {
+            Self(self.0 & !Self::HALT_CHANGE_UPDATE)
+        }
+    }
+    /// Set halt change config at busy (`HALT_CHCFG_AT_BUSY`).
+    #[inline]
+    pub const fn set_halt_change_config_at_busy(self, enable: bool) -> Self {
+        if enable {
+            Self(self.0 | Self::HALT_CHCFG_AT_BUSY)
+        } else {
+            Self(self.0 & !Self::HALT_CHCFG_AT_BUSY)
+        }
     }
     /// Halt transmission (`HALT_TX`).
     ///
     /// If FIFO is disabled, setting this bit has no effect.
     #[doc(alias = "HALT_TX")]
     #[inline]
-    pub fn halt_tx(self, enable: bool) -> Self {
+    pub const fn halt_tx(self, enable: bool) -> Self {
         Self(if enable {
             self.0 | Self::HALT_TX
         } else {
@@ -263,7 +283,7 @@ impl HaltTx {
     }
     /// Check if transmission is halted.
     #[inline]
-    pub fn is_tx_halted(self) -> bool {
+    pub const fn is_tx_halted(self) -> bool {
         (self.0 & Self::HALT_TX) != 0
     }
 }
@@ -279,7 +299,7 @@ impl DebugDll {
     /// Set the debug dll value (`DEBUG_DLL`).
     #[doc(alias = "DEBUG_DLL")]
     #[inline]
-    pub fn set_debug_dll(self, val: u8) -> Self {
+    pub const fn set_debug_dll(self, val: u8) -> Self {
         Self((self.0 & !Self::DEBUG_DLL) | (Self::DEBUG_DLL & (val as u32)))
     }
     /// Get the debug dll value.
@@ -300,7 +320,7 @@ impl DebugDlh {
     /// Set the debug dlh value (`DEBUG_DLH`).
     #[doc(alias = "DEBUG_DLH")]
     #[inline]
-    pub fn set_debug_dlh(self, val: u8) -> Self {
+    pub const fn set_debug_dlh(self, val: u8) -> Self {
         Self((self.0 & !Self::DEBUG_DLH) | (Self::DEBUG_DLH & (val as u32)))
     }
     /// Get the debug dlh value.
@@ -324,7 +344,7 @@ impl Rs485DeTime {
     /// The time interval between the serial data stop bit and the falling edge of the DE signal, measured in serial clock cycles.
     #[doc(alias = "DE_DAT")]
     #[inline]
-    pub fn set_de_deassert_time(self, time: u8) -> Self {
+    pub const fn set_de_deassert_time(self, time: u8) -> Self {
         assert!(
             time < 16,
             "Driver enable de-assert time out of range (expected 0..=15)"
@@ -341,7 +361,7 @@ impl Rs485DeTime {
     /// The time interval between the rising edge of the DE signal and the start bit of the serial data, measured in serial clock cycles.
     #[doc(alias = "DE_AT")]
     #[inline]
-    pub fn set_de_assert_time(self, time: u8) -> Self {
+    pub const fn set_de_assert_time(self, time: u8) -> Self {
         assert!(
             time < 16,
             "Driver enable assert time out of range (expected 0..=15)"
@@ -389,12 +409,12 @@ impl Rs485Control {
     /// Set rs485 control mode (`RS485_CTL_MODE`).
     #[doc(alias = "RS485_CTL_MODE")]
     #[inline]
-    pub fn set_rs485_control_mode(self, mode: Rs485ControlMode) -> Self {
+    pub const fn set_rs485_control_mode(self, mode: Rs485ControlMode) -> Self {
         Self((self.0 & !Self::RS485_CTL_MODE) | ((mode as u32) << 7))
     }
     /// Get rs485 control mode.
     #[inline]
-    pub fn rs485_control_mode(self) -> Rs485ControlMode {
+    pub const fn rs485_control_mode(self) -> Rs485ControlMode {
         match (self.0 & Self::RS485_CTL_MODE) >> 7 {
             0 => Rs485ControlMode::Hardware,
             1 => Rs485ControlMode::Software,
@@ -404,66 +424,66 @@ impl Rs485Control {
     /// Check if address is matched (`AAD_ADDR_F`).
     #[doc(alias = "AAD_ADDR_F")]
     #[inline]
-    pub fn is_rs485_address_matched(self) -> bool {
+    pub const fn is_rs485_address_matched(self) -> bool {
         (self.0 & Self::AAD_ADDR_F) != 0
     }
     /// Clear rs485 address match flag.
     #[inline]
-    pub fn clear_rs485_address_matched(self) -> Self {
+    pub const fn clear_rs485_address_matched(self) -> Self {
         Self(self.0 | Self::AAD_ADDR_F)
     }
     /// Check if address is detected (`RS485_ADDR_DET_F`).
     #[doc(alias = "RS485_ADDR_DET_F")]
     #[inline]
-    pub fn is_rs485_address_detected(self) -> bool {
+    pub const fn is_rs485_address_detected(self) -> bool {
         (self.0 & Self::RS485_ADDR_DET_F) != 0
     }
     /// Clear rs485 address detected flag.
     #[inline]
-    pub fn clear_rs485_address_detected(self) -> Self {
+    pub const fn clear_rs485_address_detected(self) -> Self {
         Self(self.0 | Self::RS485_ADDR_DET_F)
     }
     /// Enable receive all data before receiving a address (`RX_BF_ADDR`).
     #[doc(alias = "RX_BF_ADDR")]
     #[inline]
-    pub fn enable_receive_all_before_addr(self) -> Self {
+    pub const fn enable_receive_all_before_addr(self) -> Self {
         Self(self.0 | Self::RX_BF_ADDR)
     }
     /// Disable receive all data before receiving a address.
     #[inline]
-    pub fn disable_receive_all_before_addr(self) -> Self {
+    pub const fn disable_receive_all_before_addr(self) -> Self {
         Self(self.0 & !Self::RX_BF_ADDR)
     }
     /// Check if receive all data before receiving a address is enabled.
     #[inline]
-    pub fn is_receive_all_before_addr_enabled(self) -> bool {
+    pub const fn is_receive_all_before_addr_enabled(self) -> bool {
         (self.0 & Self::RX_BF_ADDR) != 0
     }
     /// Enable receive all data after receiving a address (`RX_AF_ADDR`).
     #[doc(alias = "RX_AF_ADDR")]
     #[inline]
-    pub fn enable_receive_all_after_addr(self) -> Self {
+    pub const fn enable_receive_all_after_addr(self) -> Self {
         Self(self.0 | Self::RX_AF_ADDR)
     }
     /// Disable receive all data after receiving a address.
     #[inline]
-    pub fn disable_receive_all_after_addr(self) -> Self {
+    pub const fn disable_receive_all_after_addr(self) -> Self {
         Self(self.0 & !Self::RX_AF_ADDR)
     }
     /// Check if receive all data after receiving a address is enabled.
     #[inline]
-    pub fn is_receive_all_after_addr_enabled(self) -> bool {
+    pub const fn is_receive_all_after_addr_enabled(self) -> bool {
         (self.0 & Self::RX_AF_ADDR) != 0
     }
     /// Set rs485 slave mode (`RS485_SLAVE_MODE_SEL`).
     #[doc(alias = "RS485_SLAVE_MODE_SEL")]
     #[inline]
-    pub fn set_rs485_slave_mode(self, mode: Rs485SlaveMode) -> Self {
+    pub const fn set_rs485_slave_mode(self, mode: Rs485SlaveMode) -> Self {
         Self((self.0 & !Self::RS485_SLAVE_MODE_SEL) | ((mode as u32) & Self::RS485_SLAVE_MODE_SEL))
     }
     /// Get rs485 slave mode.
     #[inline]
-    pub fn rs485_slave_mode(self) -> Rs485SlaveMode {
+    pub const fn rs485_slave_mode(self) -> Rs485SlaveMode {
         match self.0 & Self::RS485_SLAVE_MODE_SEL {
             0 => Rs485SlaveMode::NMM,
             1 => Rs485SlaveMode::AAD,
@@ -485,12 +505,12 @@ impl Rs485AddressMatch {
     /// Valid only in AAD mode.
     #[doc(alias = "ADDR_MATCH")]
     #[inline]
-    pub fn set_match_address(self, addr: u32) -> Self {
+    pub const fn set_match_address(self, addr: u32) -> Self {
         Self((self.0 & !Self::ADDR_MATCH) | (addr & Self::ADDR_MATCH))
     }
     /// Get match address.
     #[inline]
-    pub fn match_address(self) -> u32 {
+    pub const fn match_address(self) -> u32 {
         self.0 & Self::ADDR_MATCH
     }
 }
@@ -518,23 +538,23 @@ impl Rs485BusIdleCheck {
     /// Enable bus idle check (`BUS_IDLE_CHK_EN`).
     #[doc(alias = "BUS_IDLE_CHK_EN")]
     #[inline]
-    pub fn enable_bus_idle_check(self) -> Self {
+    pub const fn enable_bus_idle_check(self) -> Self {
         Self(self.0 | Self::BUS_IDLE_CHK_EN)
     }
     /// Disable bus idle check.
     #[inline]
-    pub fn disable_bus_idle_check(self) -> Self {
+    pub const fn disable_bus_idle_check(self) -> Self {
         Self(self.0 & !Self::BUS_IDLE_CHK_EN)
     }
     /// Check if bus idle check is enabled.
     #[inline]
-    pub fn is_bus_idle_check_enabled(self) -> bool {
+    pub const fn is_bus_idle_check_enabled(self) -> bool {
         (self.0 & Self::BUS_IDLE_CHK_EN) != 0
     }
     /// Get bus status (`BUS_STATUS`).
     #[doc(alias = "BUS_STATUS")]
     #[inline]
-    pub fn bus_status(self) -> Rs485BusStatus {
+    pub const fn bus_status(self) -> Rs485BusStatus {
         match (self.0 & Self::BUS_STATUS) >> 6 {
             0 => Rs485BusStatus::Idle,
             1 => Rs485BusStatus::Busy,
@@ -546,7 +566,7 @@ impl Rs485BusIdleCheck {
     /// The bus idle time, where each unit represents 8 × 16 × Tclk.
     #[doc(alias = "BUS_IDLE_TIME")]
     #[inline]
-    pub fn bus_idle_time(self) -> u32 {
+    pub const fn bus_idle_time(self) -> u32 {
         self.0 & Self::ADJ_TIME
     }
 }
@@ -565,7 +585,7 @@ impl TransmitDelay {
     /// It is used to control the interval between two bytes during data transmission.
     #[doc(alias = "TX_DLY")]
     #[inline]
-    pub fn set_transmit_delay(self, val: u8) -> Self {
+    pub const fn set_transmit_delay(self, val: u8) -> Self {
         Self((self.0 & !Self::TX_DLY) | (Self::TX_DLY & (val as u32)))
     }
     /// Get the transmit delay value.
@@ -585,7 +605,7 @@ impl DebugRegister {
 
     /// Set the bypass prefetch debugging.
     #[inline]
-    pub fn set_bypass_debug(self, enable: bool) -> Self {
+    pub const fn set_bypass_debug(self, enable: bool) -> Self {
         if enable {
             Self(self.0 | Self::BYPASS_DEBUG)
         } else {
@@ -699,6 +719,17 @@ mod tests {
 
         val = val.set_dma_pte_tx(false);
         assert!(!val.is_dma_pte_tx_set());
+        assert_eq!(val.0, 0x0000_0000);
+
+        val = val.set_halt_change_update(true);
+        assert_eq!(val.0, 0x0000_0004);
+        val = val.set_halt_change_update(false);
+        assert_eq!(val.0, 0x0000_0000);
+
+        val = val.set_halt_change_config_at_busy(true);
+        assert_eq!(val.0, 0x0000_0002);
+
+        val = val.set_halt_change_config_at_busy(false);
         assert_eq!(val.0, 0x0000_0000);
 
         val = val.halt_tx(true);
