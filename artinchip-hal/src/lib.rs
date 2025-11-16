@@ -12,8 +12,9 @@ pub mod wri;
 
 mod macros;
 
-/// Artinchip HAL prelude.
+/// ArtInChip HAL prelude.
 pub mod prelude {
     pub use crate::gpio::PadExt as _;
+    pub use crate::uart::UartExt as _;
     pub use embedded_hal::digital::{InputPin as _, OutputPin as _, StatefulOutputPin as _};
 }

@@ -1,6 +1,6 @@
 [package]
 name = "aicfwc"
-description = "Artinchip firmware converter"
+description = "ArtInChip firmware converter"
 version = "0.0.0"
 edition = "2024"
 authors = [

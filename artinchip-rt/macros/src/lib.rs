@@ -1,4 +1,4 @@
-//! Artinchip ROM runtime procedural macros.
+//! ArtInChip ROM runtime procedural macros.
 
 use proc_macro2::Span;
 use quote::quote;

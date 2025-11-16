@@ -11,6 +11,9 @@ authors = [
 volatile-register = "0.2.2"
 uart16550 = "0.0.1"
 embedded-hal = "1.0.0"
+embedded-time = "0.12.1"
+embedded-io = "0.7.1"
+riscv = "0.15.0"
 
 [features]
 d12x = []

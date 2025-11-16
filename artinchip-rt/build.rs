@@ -13,10 +13,11 @@ fn main() {
 const LINKER_SCRIPT: &[u8] = b"OUTPUT_ARCH(riscv)
 ENTRY(_start) 
 SECTIONS {
-    . = 0x30040000;
+    . = 0x30044000 - 0x8;
 	.head : ALIGN(4) {		
         KEEP(*(.head.pbp))
 	}
+    . = 0x30044000;
     .text : ALIGN(4) { 
         *(.text.entry)
         *(.text .text.*)
