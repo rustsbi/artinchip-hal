@@ -6,6 +6,7 @@ pub mod ce;
 pub mod cmu;
 pub mod dma;
 pub mod gpio;
+pub mod gtc;
 pub mod i2c;
 pub mod qspi;
 pub mod sdmc;
