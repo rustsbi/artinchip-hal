@@ -1,5 +1,6 @@
 //! ArtInChip D13x chip series.
 
+use artinchip_hal::gtc::Gtc;
 use artinchip_hal::uart::Uart;
 use paste::paste;
 
@@ -35,6 +36,8 @@ pub struct Peripherals {
     pub uart6: Uart<6>,
     /// Universal Asynchronous Receiver-Transmitter 7.
     pub uart7: Uart<7>,
+    /// Generic Timer Controller.
+    pub gtc: Gtc,
     // TODO all other peripherals.
 }
 
@@ -59,6 +62,8 @@ soc! {
     pub struct UART6 => 0x18716000, artinchip_hal::uart::RegisterBlock;
     /// Universal Asynchronous Receiver-Transmitter 7.
     pub struct UART7 => 0x18717000, artinchip_hal::uart::RegisterBlock;
+    /// Generic Timer Controller.
+    pub struct GTC => 0x19050000, artinchip_hal::gtc::RegisterBlock;
 }
 
 impl Peripherals {
@@ -81,6 +86,7 @@ impl Peripherals {
             uart5: Uart::__new(UART5::ptr()),
             uart6: Uart::__new(UART6::ptr()),
             uart7: Uart::__new(UART7::ptr()),
+            gtc: Gtc::__new(GTC::ptr()),
         }
     }
 
