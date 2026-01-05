@@ -14,11 +14,17 @@ pub struct GpioPad<const G: char, const N: u8> {
 }
 
 impl<const G: char, const N: u8> GpioPad<G, N> {
+    /// Create a new GPIO pad.
     pub const fn __new(reg: *const RegisterBlock) -> Self {
         Self {
             reg,
             _private: PhantomData,
         }
+    }
+
+    /// Get a reference to the register block.
+    pub const fn register_block(&self) -> &RegisterBlock {
+        unsafe { &*self.reg }
     }
 }
 

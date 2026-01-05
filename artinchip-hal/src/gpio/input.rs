@@ -1,6 +1,7 @@
 //! Input GPIO pad implementation.
 
 use super::{
+    GpioPad,
     mode::{FromRegisters, WithinGpioGroup, set_mode},
     register::{GpioGroup, PinConfig, PinDriveStrength, PinPull, RegisterBlock},
 };
@@ -40,6 +41,17 @@ impl<'a, const G: char, const N: u8> Input<'a, G, N> {
     #[inline]
     pub fn new_floating(regs: &'a RegisterBlock) -> Self {
         unsafe { Self::__new(regs, Self::PIN_CONFIG.set_pin_pull(PinPull::Disabled)) }
+    }
+
+    /// Free current input mode GPIO pad and return the original pad.
+    ///
+    /// Once freed, the GPIO will be reset.
+    #[inline]
+    pub fn free(self) -> GpioPad<G, N> {
+        unsafe {
+            self.group().pin_config[N as usize].write(PinConfig::zeroed());
+        }
+        GpioPad::__new(self.regs)
     }
 }
 
