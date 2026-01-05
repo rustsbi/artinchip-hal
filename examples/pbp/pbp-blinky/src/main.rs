@@ -9,11 +9,11 @@ use panic_halt as _;
 #[pbp_entry]
 fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
     let p = Peripherals::take();
-    let gtc = p.gtc.init(CntFreq::Freq4M, &p.cmu);
+    let delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &p.cmu);
     let mut pa5 = p.gpioa.pa5.into_pull_up_output();
 
     loop {
         pa5.toggle().ok();
-        gtc.delay_ms(500);
+        delay.delay_ms(500);
     }
 }

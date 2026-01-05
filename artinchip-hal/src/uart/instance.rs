@@ -15,11 +15,17 @@ pub struct Uart<const I: u8> {
 }
 
 impl<const I: u8> Uart<I> {
+    /// Create a new UART instance.
     pub const fn __new(reg: *const RegisterBlock) -> Self {
         Self {
             reg,
             _private: PhantomData,
         }
+    }
+
+    /// Get a reference to the register block.
+    pub const fn register_block(&self) -> &RegisterBlock {
+        unsafe { &*self.reg }
     }
 }
 

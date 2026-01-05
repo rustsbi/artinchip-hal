@@ -1,6 +1,7 @@
-//! Serial communication interface.
+//! Blocking serial communication interface.
 
 use super::config::UartConfig;
+use super::instance::Uart;
 use super::pad::UartPad;
 use super::pad::{Receive, Transmit};
 use super::register::RegisterBlock;
@@ -24,6 +25,7 @@ where
     TX: UartPad<I> + Transmit<I>,
     RX: UartPad<I> + Receive<I>,
 {
+    /// Create a new blocking serial.
     pub fn new(
         reg: &'a RegisterBlock,
         tx: TX,
@@ -47,10 +49,12 @@ where
             _ => panic!("Invalid UART index"),
         };
         unsafe {
+            // Initialize module clock.
+            // Reference: https://github.com/artinchip/luban-lite/blob/77fbe30dd2de366fae702ece84e1694153d94591/bsp/artinchip/hal/cmu/aic_hal_multi_parent_clk.c#L15
             uart_clk.modify(|v| v.set_module_clk_div(fix_mod_div).enable_module_clk());
             uart_clk.modify(|v| v.enable_bus_clk());
             uart_clk.modify(|v| v.enable_module_reset());
-            riscv::asm::delay(500_u32 * (fix_mod_clk_rate / 1_000_000));
+            riscv::asm::delay(500);
             uart_clk.modify(|v| v.disable_module_reset());
         }
 
@@ -134,8 +138,8 @@ where
         )
     }
 
-    /// Free the UART instance and return the TX and RX pads.
-    pub fn free(self, clk: &cmu::RegisterBlock) -> (&'a RegisterBlock, TX, RX) {
+    /// Free the blocking serial and return UART instance, TX and RX pads.
+    pub fn free(self, clk: &cmu::RegisterBlock) -> (Uart<I>, TX, RX) {
         unsafe {
             let uart_clk = match I {
                 0 => &clk.clock_uart0,
@@ -153,7 +157,7 @@ where
                     .enable_module_reset()
             });
         }
-        (self.reg, self.tx, self.rx)
+        (Uart::__new(self.reg), self.tx, self.rx)
     }
 }
 
