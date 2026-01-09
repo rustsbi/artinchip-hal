@@ -101,7 +101,7 @@ jobs:
     strategy:
       matrix:
         FEATURES: [d13x]
-        EXAMPLES: [pbp-blinky, pbp-hello-world]
+        EXAMPLES: [pbp-blinky, pbp-hello-world, pbp-i2c-master]
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1

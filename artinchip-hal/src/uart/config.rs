@@ -54,3 +54,14 @@ pub struct UartConfig {
     pub stop_bits: StopBits,
     pub parity: Parity,
 }
+
+impl Default for UartConfig {
+    fn default() -> Self {
+        Self {
+            baud_rate: Baud(115200_u32),
+            data_bits: DataBits::Eight,
+            stop_bits: StopBits::One,
+            parity: Parity::None,
+        }
+    }
+}

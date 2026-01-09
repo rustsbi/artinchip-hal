@@ -24,7 +24,7 @@ impl<const I: u8> Uart<I> {
     }
 
     /// Get a reference to the register block.
-    pub const fn register_block(&self) -> &RegisterBlock {
+    pub const fn register_block(&self) -> &'static RegisterBlock {
         unsafe { &*self.reg }
     }
 }
@@ -42,6 +42,6 @@ impl<const I: u8> UartExt<'static, I> for Uart<I> {
         TX: UartPad<I> + Transmit<I>,
         RX: UartPad<I> + Receive<I>,
     {
-        unsafe { BlockingSerial::new(&*self.reg, tx, rx, config, clk) }
+        BlockingSerial::new(self.register_block(), tx, rx, config, clk)
     }
 }

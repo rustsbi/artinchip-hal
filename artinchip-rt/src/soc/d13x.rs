@@ -1,6 +1,7 @@
 //! ArtInChip D13x chip series.
 
 use artinchip_hal::gtc::Gtc;
+use artinchip_hal::i2c::I2c;
 use artinchip_hal::uart::Uart;
 use paste::paste;
 
@@ -38,6 +39,12 @@ pub struct Peripherals {
     pub uart7: Uart<7>,
     /// Generic Timer Controller.
     pub gtc: Gtc,
+    /// Inter-Integrated Circuit 0.
+    pub i2c0: I2c<0>,
+    /// Inter-Integrated Circuit 1.
+    pub i2c1: I2c<1>,
+    /// Inter-Integrated Circuit 2.
+    pub i2c2: I2c<2>,
     // TODO all other peripherals.
 }
 
@@ -64,6 +71,12 @@ soc! {
     pub struct UART7 => 0x18717000, artinchip_hal::uart::RegisterBlock;
     /// Generic Timer Controller.
     pub struct GTC => 0x19050000, artinchip_hal::gtc::RegisterBlock;
+    /// Inter-Integrated Circuit 0.
+    pub struct I2C0 => 0x19220000, artinchip_hal::i2c::RegisterBlock;
+    /// Inter-Integrated Circuit 1.
+    pub struct I2C1 => 0x19221000, artinchip_hal::i2c::RegisterBlock;
+    /// Inter-Integrated Circuit 2.
+    pub struct I2C2 => 0x19222000, artinchip_hal::i2c::RegisterBlock;
 }
 
 impl Peripherals {
@@ -87,6 +100,9 @@ impl Peripherals {
             uart6: Uart::__new(UART6::ptr()),
             uart7: Uart::__new(UART7::ptr()),
             gtc: Gtc::__new(GTC::ptr()),
+            i2c0: I2c::__new(I2C0::ptr()),
+            i2c1: I2c::__new(I2C1::ptr()),
+            i2c2: I2c::__new(I2C2::ptr()),
         }
     }
 
