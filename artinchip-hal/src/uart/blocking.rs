@@ -1,12 +1,10 @@
 //! Blocking serial communication interface.
 
-use super::config::UartConfig;
+use super::config::{StopBits, UartConfig};
 use super::instance::Uart;
-use super::pad::UartPad;
-use super::pad::{Receive, Transmit};
+use super::pad::{Receive, Transmit, UartPad};
 use super::register::RegisterBlock;
 use crate::cmu;
-use crate::uart::config::StopBits;
 use uart16550::TriggerLevel;
 
 /// Blocking serial communication interface.
@@ -50,7 +48,7 @@ where
         };
         unsafe {
             // Initialize module clock.
-            // Reference: https://github.com/artinchip/luban-lite/blob/77fbe30dd2de366fae702ece84e1694153d94591/bsp/artinchip/hal/cmu/aic_hal_multi_parent_clk.c#L15
+            // Reference: https://aicdoc.artinchip.com/topics/ic/cmu/cmu-function2-d13x.html#topic_yvp_f24_4bc__table_qb3_bn5_ydc
             uart_clk.modify(|v| v.set_module_clk_div(fix_mod_div).enable_module_clk());
             uart_clk.modify(|v| v.enable_bus_clk());
             uart_clk.modify(|v| v.enable_module_reset());

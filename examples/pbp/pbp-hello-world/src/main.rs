@@ -5,7 +5,6 @@ use artinchip_hal::prelude::*;
 use artinchip_hal::uart::*;
 use artinchip_rt::{Peripherals, pbp_entry};
 use embedded_io::Write;
-use embedded_time::rate::Baud;
 use panic_halt as _;
 
 #[pbp_entry]
@@ -15,17 +14,7 @@ fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
     let rx = p.gpioa.pa1.into_function::<5>();
     let mut pa5 = p.gpioa.pa5.into_pull_up_input();
 
-    let mut uart0 = p.uart0.new_blocking(
-        tx,
-        rx,
-        UartConfig {
-            baud_rate: Baud(115200_u32),
-            data_bits: DataBits::Eight,
-            stop_bits: StopBits::One,
-            parity: Parity::None,
-        },
-        &p.cmu,
-    );
+    let mut uart0 = p.uart0.new_blocking(tx, rx, UartConfig::default(), &p.cmu);
 
     writeln!(
         uart0,
@@ -33,9 +22,9 @@ fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
     )
     .ok();
     loop {
-        if pa5.is_low().unwrap() {
+        if pa5.is_low().unwrap_or(false) {
             writeln!(uart0, "Button pressed!").ok();
-            while pa5.is_low().unwrap() {
+            while pa5.is_low().unwrap_or(false) {
                 // wait for button to release
                 core::hint::spin_loop();
             }

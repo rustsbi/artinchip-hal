@@ -14,7 +14,7 @@ impl<'a> TimerDelay<'a> {
         let clk = &cmu.clock_gtc;
         unsafe {
             // Initialize module clock.
-            // Reference: https://github.com/artinchip/luban-lite/blob/77fbe30dd2de366fae702ece84e1694153d94591/bsp/artinchip/hal/cmu/aic_hal_multi_parent_clk.c#L15
+            // Reference: https://aicdoc.artinchip.com/topics/ic/cmu/cmu-function2-d13x.html#topic_yvp_f24_4bc__table_qb3_bn5_ydc
             clk.modify(|v| v.enable_bus_clk());
             clk.modify(|v| v.enable_module_reset());
             riscv::asm::delay(500);

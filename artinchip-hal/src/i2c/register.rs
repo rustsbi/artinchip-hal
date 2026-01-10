@@ -100,12 +100,12 @@ pub enum SpeedMode {
     Fast = 2,
 }
 
-/// Addressing mode.
+/// Address mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AddressingMode {
-    /// 7-bit addressing mode.
+pub enum AddressMode {
+    /// 7-bit address mode.
     Bit7,
-    /// 10-bit addressing mode.
+    /// 10-bit address mode.
     Bit10,
 }
 
@@ -225,39 +225,39 @@ impl Control {
             _ => unreachable!(),
         }
     }
-    /// Set addressing mode for slave (`TENBITADDR_SELECT_SLAVE`).
+    /// Set address mode for slave (`TENBITADDR_SELECT_SLAVE`).
     #[doc(alias = "TENBITADDR_SELECT_SLAVE")]
     #[inline]
-    pub const fn set_addressing_mode_slave(self, mode: AddressingMode) -> Self {
+    pub const fn set_address_mode_slave(self, mode: AddressMode) -> Self {
         Self(
             (self.0 & !Self::TENBITADDR_SELECT_SLAVE)
                 | (Self::TENBITADDR_SELECT_SLAVE & ((mode as u32) << 3)),
         )
     }
-    /// Get addressing mode for slave.
+    /// Get address mode for slave.
     #[inline]
-    pub const fn addressing_mode_slave(self) -> AddressingMode {
+    pub const fn address_mode_slave(self) -> AddressMode {
         match (self.0 & Self::TENBITADDR_SELECT_SLAVE) >> 3 {
-            0 => AddressingMode::Bit7,
-            1 => AddressingMode::Bit10,
+            0 => AddressMode::Bit7,
+            1 => AddressMode::Bit10,
             _ => unreachable!(),
         }
     }
-    /// Set addressing mode for master (`TENBITADDR_SELECT_MASTER`).
+    /// Set address mode for master (`TENBITADDR_SELECT_MASTER`).
     #[doc(alias = "TENBITADDR_SELECT_MASTER")]
     #[inline]
-    pub const fn set_addressing_mode_master(self, mode: AddressingMode) -> Self {
+    pub const fn set_address_mode_master(self, mode: AddressMode) -> Self {
         Self(
             (self.0 & !Self::TENBITADDR_SELECT_MASTER)
                 | (Self::TENBITADDR_SELECT_MASTER & ((mode as u32) << 2)),
         )
     }
-    /// Get addressing mode for master.
+    /// Get address mode for master.
     #[inline]
-    pub const fn addressing_mode_master(self) -> AddressingMode {
+    pub const fn address_mode_master(self) -> AddressMode {
         match (self.0 & Self::TENBITADDR_SELECT_MASTER) >> 2 {
-            0 => AddressingMode::Bit7,
-            1 => AddressingMode::Bit10,
+            0 => AddressMode::Bit7,
+            1 => AddressMode::Bit10,
             _ => unreachable!(),
         }
     }
@@ -682,6 +682,12 @@ impl InterruptMask {
     const M_TX_EMPTY: u32 = 0x1 << 4;
     const M_RX_FULL: u32 = 0x1 << 2;
     const M_RX_UNDER: u32 = 0x1;
+
+    /// Disable all interrupts.
+    #[inline]
+    pub const fn disable_all(self) -> Self {
+        Self(0)
+    }
 
     /// Enable scl stuck at low interrupt (`M_SCL_STUCK_AT_LOW`).
     #[doc(alias = "M_SCL_STUCK_AT_LOW")]
@@ -1453,7 +1459,7 @@ impl RxFifoLevel {
 #[cfg(test)]
 mod tests {
     use super::{
-        AckGenCall, AddressingMode, Control, DataCommand, Enable, EnableStatus, FastSclHighCnt,
+        AckGenCall, AddressMode, Control, DataCommand, Enable, EnableStatus, FastSclHighCnt,
         FastSclLowCnt, InterruptClear, InterruptMask, RawInterruptStatus, RegisterBlock,
         RxFifoLevel, RxThreshold, SdaHold, SdaSetup, Slave, SpeedMode, StandardSclHighCnt,
         StandardSclLowCnt, Status, Target, TransferMode, TxAbortSource, TxFifoLevel, TxThreshold,
@@ -1537,18 +1543,18 @@ mod tests {
         assert_eq!(val.speed_mode(), SpeedMode::Standard);
         assert_eq!(val.0, 0x0000_0010);
 
-        val = Control(0x0).set_addressing_mode_slave(AddressingMode::Bit10);
-        assert_eq!(val.addressing_mode_slave(), AddressingMode::Bit10);
+        val = Control(0x0).set_address_mode_slave(AddressMode::Bit10);
+        assert_eq!(val.address_mode_slave(), AddressMode::Bit10);
         assert_eq!(val.0, 0x0000_0008);
-        val = val.set_addressing_mode_slave(AddressingMode::Bit7);
-        assert_eq!(val.addressing_mode_slave(), AddressingMode::Bit7);
+        val = val.set_address_mode_slave(AddressMode::Bit7);
+        assert_eq!(val.address_mode_slave(), AddressMode::Bit7);
         assert_eq!(val.0, 0x0000_0000);
 
-        val = val.set_addressing_mode_master(AddressingMode::Bit10);
-        assert_eq!(val.addressing_mode_master(), AddressingMode::Bit10);
+        val = val.set_address_mode_master(AddressMode::Bit10);
+        assert_eq!(val.address_mode_master(), AddressMode::Bit10);
         assert_eq!(val.0, 0x0000_0004);
-        val = val.set_addressing_mode_master(AddressingMode::Bit7);
-        assert_eq!(val.addressing_mode_master(), AddressingMode::Bit7);
+        val = val.set_address_mode_master(AddressMode::Bit7);
+        assert_eq!(val.address_mode_master(), AddressMode::Bit7);
         assert_eq!(val.0, 0x0000_0000);
 
         val = val.disable_slave_mode();

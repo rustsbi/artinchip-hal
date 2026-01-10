@@ -22,13 +22,13 @@ impl Gtc {
     }
 
     /// Get a reference to the register block.
-    pub const fn register_block(&self) -> &RegisterBlock {
+    pub const fn register_block(&self) -> &'static RegisterBlock {
         unsafe { &*self.reg }
     }
 }
 
 impl GtcExt<'static> for Gtc {
     fn new_timer_delay(self, freq: CntFreq, cmu: &cmu::RegisterBlock) -> TimerDelay<'static> {
-        TimerDelay::new(unsafe { &*self.reg }, freq, cmu)
+        TimerDelay::new(self.register_block(), freq, cmu)
     }
 }
