@@ -9,6 +9,7 @@ pub mod gpio;
 pub mod gtc;
 pub mod i2c;
 pub mod qspi;
+pub mod rtc;
 pub mod sdmc;
 pub mod uart;
 pub mod wri;

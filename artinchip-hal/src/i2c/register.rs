@@ -1394,7 +1394,7 @@ impl RxThreshold {
     #[doc(alias = "RX_TL")]
     #[inline]
     pub const fn set_rx_threshold(self, thres: u8) -> Self {
-        assert!(thres < 8, "Threshold out of range (expected 0..=8)");
+        assert!(thres < 8, "Threshold out of range (expected 0..=7)");
         Self((self.0 & !Self::RX_TL) | ((thres as u32) & Self::RX_TL))
     }
     /// Get rx threshold.
@@ -1416,7 +1416,7 @@ impl TxThreshold {
     #[doc(alias = "TX_TL")]
     #[inline]
     pub const fn set_tx_threshold(self, thres: u8) -> Self {
-        assert!(thres < 8, "Threshold out of range (expected 0..=8)");
+        assert!(thres < 8, "Threshold out of range (expected 0..=7)");
         Self((self.0 & !Self::TX_TL) | ((thres as u32) & Self::TX_TL))
     }
     /// Get tx threshold.
@@ -2041,7 +2041,7 @@ mod tests {
     test_should_panic!((
         test_set_rx_threshold_panic,
         RxThreshold(0x0).set_rx_threshold(0x8),
-        "Threshold out of range (expected 0..=8)"
+        "Threshold out of range (expected 0..=7)"
     ),);
 
     #[test]
@@ -2055,7 +2055,7 @@ mod tests {
     test_should_panic!((
         test_set_tx_threshold_panic,
         TxThreshold(0x0).set_tx_threshold(0x8),
-        "Threshold out of range (expected 0..=8)"
+        "Threshold out of range (expected 0..=7)"
     ),);
 
     #[test]

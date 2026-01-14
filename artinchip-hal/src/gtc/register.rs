@@ -166,7 +166,7 @@ impl Config {
     #[inline]
     pub const fn set_fdiv(self, div: u16) -> Self {
         assert!(
-            div <= 0x1F,
+            div < 0x20,
             "Frequency divider out of range (expected 0..=31)"
         );
         Self((self.0 & !Self::FDIV) | (Self::FDIV & ((div as u32) << 8)))

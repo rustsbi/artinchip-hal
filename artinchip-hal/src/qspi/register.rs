@@ -1431,7 +1431,7 @@ impl ClkConfig {
     #[doc(alias = "CKDIV1")]
     #[inline]
     pub const fn set_clk_div_1(self, div: u8) -> Self {
-        assert!(div <= 0xF, "CKDIV1 out of range (expected 0..=15)");
+        assert!(div < 0x10, "CKDIV1 out of range (expected 0..=15)");
         Self((self.0 & !Self::CKDIV1) | (Self::CKDIV1 & ((div as u32) << 8)))
     }
     /// Get clock divider 1.
@@ -1467,7 +1467,7 @@ impl TotalBytesCnt {
     #[inline]
     pub const fn set_total_bytes(self, bytes: u32) -> Self {
         assert!(
-            bytes <= 0xFFFFFF,
+            bytes < 0x1000000,
             "Total bytes out of range (expected 0..=0xFFFFFF)"
         );
         Self((self.0 & !Self::TOTAL_BYTES) | (Self::TOTAL_BYTES & bytes))
@@ -1492,7 +1492,7 @@ impl TransCnt {
     #[inline]
     pub const fn set_tx_cnt(self, cnt: u32) -> Self {
         assert!(
-            cnt <= 0xFFFFFF,
+            cnt < 0x1000000,
             "Transmit write counter out of range (expected 0..=0xFFFFFF)"
         );
         Self((self.0 & !Self::TXD_CNT) | (Self::TXD_CNT & cnt))
@@ -1612,7 +1612,7 @@ impl TransMiscControl {
     #[inline]
     pub const fn set_single_tx_count(self, count: u32) -> Self {
         assert!(
-            count <= 0xFFFFFF,
+            count < 0x1000000,
             "Single wire tx data count out of range (expected 0..=0xFFFFFF)"
         );
         Self((self.0 & !Self::STXD_CNT) | (Self::STXD_CNT & count))
@@ -1768,7 +1768,7 @@ impl BitModeTransConfig {
     #[inline]
     pub const fn set_bm_rx_count(self, count: u8) -> Self {
         assert!(
-            count <= 0x3F,
+            count < 0x40,
             "Bit-mode rx data length out of range (expected 0..=63)"
         );
         Self((self.0 & !Self::BM_RXCNT) | (Self::BM_RXCNT & ((count as u32) << 16)))
@@ -1786,7 +1786,7 @@ impl BitModeTransConfig {
     #[inline]
     pub const fn set_bm_tx_count(self, count: u8) -> Self {
         assert!(
-            count <= 0x3F,
+            count < 0x40,
             "Bit-mode tx count out of range (expected 0..=63)"
         );
         Self((self.0 & !Self::BM_TXCNT) | (Self::BM_TXCNT & ((count as u32) << 8)))
@@ -1949,7 +1949,7 @@ impl BurstSet {
     #[inline]
     pub fn set_dummy_byte_cnt(self, count: u8) -> Self {
         assert!(
-            count <= 0xF,
+            count < 0x10,
             "Dummy byte count out of range (expected 0..=15)"
         );
         Self((self.0 & !Self::DUMMY_BYTE) | (Self::DUMMY_BYTE & ((count as u32) << 20)))
@@ -2062,7 +2062,7 @@ impl ReadCmdMode {
     #[inline]
     pub const fn set_dummy_byte_cnt(self, count: u8) -> Self {
         assert!(
-            count <= 0xF,
+            count < 0x10,
             "Dummy byte count out of range (expected 0..=15)"
         );
         Self((self.0 & !Self::DUMMY_BYTE) | (Self::DUMMY_BYTE & ((count as u32) << 20)))
@@ -2218,7 +2218,7 @@ impl IdmaTxLen {
     #[inline]
     pub const fn set_idma_tx_len(self, len: u32) -> Self {
         assert!(
-            len <= 0xFFFFFF,
+            len < 0x1000000,
             "IDMA tx length out of range (expected 0..=0xFFFFFF)"
         );
         Self((self.0 & !Self::IDMA_TXLEN) | (Self::IDMA_TXLEN & len))
@@ -2243,7 +2243,7 @@ impl IdmaRxLen {
     #[inline]
     pub const fn set_idma_rx_len(self, len: u32) -> Self {
         assert!(
-            len <= 0xFFFFFF,
+            len < 0x1000000,
             "IDMA rx length out of range (expected 0..=0xFFFFFF)"
         );
         Self((self.0 & !Self::IDMA_RXLEN) | (Self::IDMA_RXLEN & len))
