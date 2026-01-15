@@ -11,6 +11,7 @@ pub mod i2c;
 pub mod qspi;
 pub mod rtc;
 pub mod sdmc;
+pub mod sid;
 pub mod spi_enc;
 pub mod uart;
 pub mod wri;
