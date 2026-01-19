@@ -15,6 +15,7 @@ pub mod sid;
 pub mod spi_enc;
 pub mod uart;
 pub mod wri;
+pub mod xspi;
 
 mod macros;
 
