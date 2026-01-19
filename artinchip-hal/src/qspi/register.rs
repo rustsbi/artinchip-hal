@@ -1,5 +1,6 @@
 //! QSPI register blocks and registers.
 
+use embedded_hal::spi::{Phase, Polarity};
 use volatile_register::{RO, RW, WO};
 
 /// Quad Serial Peripheral Interface Register Block.
@@ -292,36 +293,6 @@ pub enum CsValidMode {
     InactiveWhenIdle,
 }
 
-/// CS polarity.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
-pub enum CsPolarity {
-    /// Valid when CS is low.
-    Low,
-    /// Valid when CS is high.
-    High,
-}
-
-/// Clock polarity.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
-pub enum ClockPolarity {
-    /// Clock is low when idle.
-    Low,
-    /// Clock is high when idle.
-    High,
-}
-
-/// Clock phase.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
-pub enum ClockPhase {
-    /// Data sampled on the first edge of the clock.
-    FirstEdge,
-    /// Data sampled on the second edge of the clock.
-    SecondEdge,
-}
-
 /// SPI transfer configuration register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -602,15 +573,15 @@ impl TransferConfig {
     /// Not writable when `START` = 1.
     #[doc(alias = "CS_POL")]
     #[inline]
-    pub const fn set_cs_pol(self, pol: CsPolarity) -> Self {
+    pub const fn set_cs_pol(self, pol: Polarity) -> Self {
         Self((self.0 & !Self::CS_POL) | (Self::CS_POL & ((pol as u32) << 2)))
     }
     /// Get cs polarity.
     #[inline]
-    pub const fn cs_pol(self) -> CsPolarity {
+    pub const fn cs_pol(self) -> Polarity {
         match (self.0 & Self::CS_POL) >> 2 {
-            0 => CsPolarity::Low,
-            1 => CsPolarity::High,
+            0 => Polarity::IdleLow,
+            1 => Polarity::IdleHigh,
             _ => unreachable!(),
         }
     }
@@ -619,15 +590,15 @@ impl TransferConfig {
     /// Not writable when `START` = 1.
     #[doc(alias = "CPOL")]
     #[inline]
-    pub const fn set_clk_pol(self, pol: ClockPolarity) -> Self {
+    pub const fn set_clk_pol(self, pol: Polarity) -> Self {
         Self((self.0 & !Self::CPOL) | (Self::CPOL & ((pol as u32) << 1)))
     }
     /// Get clock polarity.
     #[inline]
-    pub const fn clk_pol(self) -> ClockPolarity {
+    pub const fn clk_pol(self) -> Polarity {
         match (self.0 & Self::CPOL) >> 1 {
-            0 => ClockPolarity::Low,
-            1 => ClockPolarity::High,
+            0 => Polarity::IdleLow,
+            1 => Polarity::IdleHigh,
             _ => unreachable!(),
         }
     }
@@ -636,15 +607,15 @@ impl TransferConfig {
     /// Not writable when `START` = 1.
     #[doc(alias = "CPHA")]
     #[inline]
-    pub const fn set_clk_phase(self, phase: ClockPhase) -> Self {
-        Self((self.0 & !Self::CPHA) | (Self::CPHA & (phase as u32)))
+    pub const fn set_clk_pha(self, pha: Phase) -> Self {
+        Self((self.0 & !Self::CPHA) | (Self::CPHA & (pha as u32)))
     }
     /// Get clock phase.
     #[inline]
-    pub const fn clk_phase(self) -> ClockPhase {
+    pub const fn clk_pha(self) -> Phase {
         match self.0 & Self::CPHA {
-            0 => ClockPhase::FirstEdge,
-            1 => ClockPhase::SecondEdge,
+            0 => Phase::CaptureOnFirstTransition,
+            1 => Phase::CaptureOnSecondTransition,
             _ => unreachable!(),
         }
     }
@@ -1658,16 +1629,6 @@ pub enum BMCsPin {
     Cs0,
 }
 
-/// Bit-mode CS polarity.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
-pub enum BMCsPolarity {
-    /// Valid when CS is high.
-    High,
-    /// Valid when CS is low.
-    Low,
-}
-
 /// Bus mode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -1838,15 +1799,15 @@ impl BitModeTransConfig {
     /// Not writable when `BM_START` = 1.
     #[doc(alias = "BMCS_POL")]
     #[inline]
-    pub const fn set_bm_cs_polarity(self, polarity: BMCsPolarity) -> Self {
-        Self((self.0 & !Self::BMCS_POL) | (Self::BMCS_POL & ((polarity as u32) << 5)))
+    pub const fn set_bm_cs_pol(self, pol: Polarity) -> Self {
+        Self((self.0 & !Self::BMCS_POL) | (Self::BMCS_POL & ((pol as u32) << 5)))
     }
     /// Get bit-mode cs polarity.
     #[inline]
-    pub const fn bm_cs_polarity(self) -> BMCsPolarity {
+    pub const fn bm_cs_pol(self) -> Polarity {
         match (self.0 & Self::BMCS_POL) >> 5 {
-            0 => BMCsPolarity::High,
-            1 => BMCsPolarity::Low,
+            0 => Polarity::IdleLow,
+            1 => Polarity::IdleHigh,
             _ => unreachable!(),
         }
     }
@@ -2552,25 +2513,25 @@ mod tests {
         assert_eq!(val.cs_valid_mode(), CsValidMode::Continuous);
         assert_eq!(val.0, 0x0000_0000);
 
-        val = val.set_cs_pol(CsPolarity::High);
-        assert_eq!(val.cs_pol(), CsPolarity::High);
+        val = val.set_cs_pol(Polarity::IdleHigh);
+        assert_eq!(val.cs_pol(), Polarity::IdleHigh);
         assert_eq!(val.0, 0x0000_0004);
-        val = val.set_cs_pol(CsPolarity::Low);
-        assert_eq!(val.cs_pol(), CsPolarity::Low);
+        val = val.set_cs_pol(Polarity::IdleLow);
+        assert_eq!(val.cs_pol(), Polarity::IdleLow);
         assert_eq!(val.0, 0x0000_0000);
 
-        val = val.set_clk_pol(ClockPolarity::High);
-        assert_eq!(val.clk_pol(), ClockPolarity::High);
+        val = val.set_clk_pol(Polarity::IdleHigh);
+        assert_eq!(val.clk_pol(), Polarity::IdleHigh);
         assert_eq!(val.0, 0x0000_0002);
-        val = val.set_clk_pol(ClockPolarity::Low);
-        assert_eq!(val.clk_pol(), ClockPolarity::Low);
+        val = val.set_clk_pol(Polarity::IdleLow);
+        assert_eq!(val.clk_pol(), Polarity::IdleLow);
         assert_eq!(val.0, 0x0000_0000);
 
-        val = val.set_clk_phase(ClockPhase::SecondEdge);
-        assert_eq!(val.clk_phase(), ClockPhase::SecondEdge);
+        val = val.set_clk_pha(Phase::CaptureOnSecondTransition);
+        assert_eq!(val.clk_pha(), Phase::CaptureOnSecondTransition);
         assert_eq!(val.0, 0x0000_0001);
-        val = val.set_clk_phase(ClockPhase::FirstEdge);
-        assert_eq!(val.clk_phase(), ClockPhase::FirstEdge);
+        val = val.set_clk_pha(Phase::CaptureOnFirstTransition);
+        assert_eq!(val.clk_pha(), Phase::CaptureOnFirstTransition);
         assert_eq!(val.0, 0x0000_0000);
     }
 
@@ -2998,11 +2959,11 @@ mod tests {
         assert_eq!(val.bm_cs_ctrl_mode(), BMCsCtrlMode::SpiController);
         assert_eq!(val.0, 0x0000_0000);
 
-        val = val.set_bm_cs_polarity(BMCsPolarity::Low);
-        assert_eq!(val.bm_cs_polarity(), BMCsPolarity::Low);
+        val = val.set_bm_cs_pol(Polarity::IdleHigh);
+        assert_eq!(val.bm_cs_pol(), Polarity::IdleHigh);
         assert_eq!(val.0, 0x0000_0020);
-        val = val.set_bm_cs_polarity(BMCsPolarity::High);
-        assert_eq!(val.bm_cs_polarity(), BMCsPolarity::High);
+        val = val.set_bm_cs_pol(Polarity::IdleLow);
+        assert_eq!(val.bm_cs_pol(), Polarity::IdleLow);
         assert_eq!(val.0, 0x0000_0000);
 
         val = val.set_bm_cs_pin(BMCsPin::Cs0);

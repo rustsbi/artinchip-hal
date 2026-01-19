@@ -1732,7 +1732,9 @@ mod tests {
 
     #[test]
     fn struct_interrupt_mask_functions() {
-        let mut val = InterruptMask(0x0);
+        let mut val = InterruptMask(0x1234_5678);
+        val = val.disable_all();
+        assert_eq!(val.0, 0x0000_0000);
 
         val = val.enable_scl_stuck_at_low();
         assert!(val.is_scl_stuck_at_low_enabled());
