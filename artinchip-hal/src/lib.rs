@@ -13,6 +13,7 @@ pub mod rtc;
 pub mod sdmc;
 pub mod sid;
 pub mod spi_enc;
+pub mod sys_cfg;
 pub mod uart;
 pub mod wri;
 pub mod xspi;
