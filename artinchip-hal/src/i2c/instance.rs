@@ -5,7 +5,7 @@ use super::config::I2cConfig;
 use super::i2c_ext::I2cExt;
 use super::pad::{I2cPad, SerialClock, SerialData};
 use super::register::RegisterBlock;
-use crate::cmu;
+use crate::cmu::Cmu;
 use core::marker::PhantomData;
 
 /// I2C with statically known instance number.
@@ -35,12 +35,12 @@ impl<const I: u8> I2cExt<'static, I> for I2c<I> {
         scl: SCL,
         sda: SDA,
         config: I2cConfig,
-        clk: &cmu::RegisterBlock,
+        cmu: &Cmu,
     ) -> BlockingI2c<'static, I, SCL, SDA>
     where
         SCL: I2cPad<I> + SerialClock<I>,
         SDA: I2cPad<I> + SerialData<I>,
     {
-        BlockingI2c::new(self.register_block(), scl, sda, config, clk)
+        BlockingI2c::new(self.register_block(), scl, sda, config, cmu)
     }
 }

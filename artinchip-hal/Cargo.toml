@@ -14,6 +14,7 @@ embedded-hal = "1.0.0"
 embedded-time = "0.12.1"
 embedded-io = "0.7.1"
 riscv = "0.15.0"
+xuantie-riscv = {git = "https://github.com/rustsbi/xuantie.git", branch = "main"}
 
 [features]
 d12x = []

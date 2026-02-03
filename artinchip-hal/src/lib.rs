@@ -3,6 +3,8 @@
 
 pub mod axi_cfg;
 pub mod ce;
+pub mod clic;
+pub mod clint;
 pub mod cmu;
 pub mod dma;
 pub mod gpio;
@@ -27,4 +29,25 @@ pub mod prelude {
     pub use crate::uart::UartExt as _;
     pub use embedded_hal::digital::{InputPin as _, OutputPin as _, StatefulOutputPin as _};
     pub use embedded_hal::i2c::I2c as _;
+}
+
+/// ArtInChip HAL instances.
+pub mod instances {
+    pub use crate::axi_cfg::AxiCfg;
+    pub use crate::ce::Ce;
+    pub use crate::clic::Clic;
+    pub use crate::clint::Clint;
+    pub use crate::cmu::Cmu;
+    pub use crate::dma::Dma;
+    pub use crate::gtc::Gtc;
+    pub use crate::i2c::I2c;
+    pub use crate::qspi::Qspi;
+    pub use crate::rtc::Rtc;
+    pub use crate::sdmc::Sdmc;
+    pub use crate::sid::Sid;
+    pub use crate::spi_enc::SpiEnc;
+    pub use crate::sys_cfg::SysCfg;
+    pub use crate::uart::Uart;
+    pub use crate::wri::Wri;
+    pub use crate::xspi::Xspi;
 }

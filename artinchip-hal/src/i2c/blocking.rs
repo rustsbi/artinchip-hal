@@ -6,7 +6,7 @@ use super::config::{I2cConfig, Role};
 use super::instance::I2c;
 use super::pad::{I2cPad, SerialClock, SerialData};
 use super::register::{AddressMode, RegisterBlock, SpeedMode, TransferMode};
-use crate::cmu;
+use crate::cmu::Cmu;
 
 /// Blocking I2C interface.
 pub struct BlockingI2c<'a, const I: u8, SCL, SDA>
@@ -28,14 +28,9 @@ where
     const I2C_DEFAULT_CLOCK: u32 = 24_000_000;
 
     /// Create a new blocking serial.
-    pub fn new(
-        reg: &'a RegisterBlock,
-        scl: SCL,
-        sda: SDA,
-        config: I2cConfig,
-        clk: &cmu::RegisterBlock,
-    ) -> Self {
+    pub fn new(reg: &'a RegisterBlock, scl: SCL, sda: SDA, config: I2cConfig, cmu: &Cmu) -> Self {
         // Reference: https://aicdoc.artinchip.com/topics/ic/i2c/i2c-programming-guide-d13x.html
+        let clk = cmu.register_block();
         let i2c_clk = match I {
             0 => &clk.clock_i2c0,
             1 => &clk.clock_i2c1,
@@ -157,8 +152,9 @@ where
     }
 
     /// Free the blocking I2C and return I2C instance, SCL and SDA pads.
-    pub fn free(self, clk: &cmu::RegisterBlock) -> (I2c<I>, SCL, SDA) {
+    pub fn free(self, cmu: &Cmu) -> (I2c<I>, SCL, SDA) {
         unsafe {
+            let clk = cmu.register_block();
             let i2c_clk = match I {
                 0 => &clk.clock_i2c0,
                 1 => &clk.clock_i2c1,

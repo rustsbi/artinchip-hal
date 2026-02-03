@@ -1605,30 +1605,6 @@ pub enum BMSampleMode {
     Standard,
 }
 
-/// Bit-mode CS level.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
-pub enum BMCsLevel {
-    Low,
-    High,
-}
-
-/// Bit-mode CS control mode.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
-pub enum BMCsCtrlMode {
-    SpiController,
-    Software,
-}
-
-/// Bit-mode external device cs pin number.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
-pub enum BMCsPin {
-    /// CS0 is valid.
-    Cs0,
-}
-
 /// Bus mode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -1763,15 +1739,15 @@ impl BitModeTransConfig {
     /// Not writable when `BM_START` = 1.
     #[doc(alias = "BMCS_LEVEL")]
     #[inline]
-    pub const fn set_bm_cs_level(self, level: BMCsLevel) -> Self {
+    pub const fn set_bm_cs_level(self, level: CsLevel) -> Self {
         Self((self.0 & !Self::BMCS_LEVEL) | (Self::BMCS_LEVEL & ((level as u32) << 7)))
     }
     /// Get bit-mode cs level.
     #[inline]
-    pub const fn bm_cs_level(self) -> BMCsLevel {
+    pub const fn bm_cs_level(self) -> CsLevel {
         match (self.0 & Self::BMCS_LEVEL) >> 7 {
-            0 => BMCsLevel::Low,
-            1 => BMCsLevel::High,
+            0 => CsLevel::Low,
+            1 => CsLevel::High,
             _ => unreachable!(),
         }
     }
@@ -1781,15 +1757,15 @@ impl BitModeTransConfig {
     /// Not writable when `BM_START` = 1.
     #[doc(alias = "BMCS_CTRL_SEL")]
     #[inline]
-    pub const fn set_bm_cs_ctrl_mode(self, mode: BMCsCtrlMode) -> Self {
+    pub const fn set_bm_cs_ctrl_mode(self, mode: CsCtrlMode) -> Self {
         Self((self.0 & !Self::BMCS_CTRL_SEL) | (Self::BMCS_CTRL_SEL & ((mode as u32) << 6)))
     }
     /// Get bit-mode cs control mode.
     #[inline]
-    pub const fn bm_cs_ctrl_mode(self) -> BMCsCtrlMode {
+    pub const fn bm_cs_ctrl_mode(self) -> CsCtrlMode {
         match (self.0 & Self::BMCS_CTRL_SEL) >> 6 {
-            0 => BMCsCtrlMode::SpiController,
-            1 => BMCsCtrlMode::Software,
+            0 => CsCtrlMode::SpiController,
+            1 => CsCtrlMode::Software,
             _ => unreachable!(),
         }
     }
@@ -1817,14 +1793,17 @@ impl BitModeTransConfig {
     /// Not writable when `BM_START` = 1.
     #[doc(alias = "BMCS_NUM")]
     #[inline]
-    pub const fn set_bm_cs_pin(self, pin: BMCsPin) -> Self {
-        Self((self.0 & !Self::BMCS_NUM) | (Self::BMCS_NUM & ((pin as u32) << 2)))
+    pub const fn set_bm_cs_pin(self, pin: CsPin) -> Self {
+        match pin {
+            CsPin::Cs0 => Self((self.0 & !Self::BMCS_NUM) | (Self::BMCS_NUM & ((pin as u32) << 2))),
+            _ => panic!("Only CS0 is supported in bit-mode"),
+        }
     }
     /// Get bit-mode cs pin number.
     #[inline]
-    pub const fn bm_cs_pin(self) -> BMCsPin {
+    pub const fn bm_cs_pin(self) -> CsPin {
         match (self.0 & Self::BMCS_NUM) >> 2 {
-            0 => BMCsPin::Cs0,
+            0 => CsPin::Cs0,
             _ => unreachable!(),
         }
     }
@@ -2945,18 +2924,18 @@ mod tests {
         assert_eq!(val.bm_tx_count(), 0x3F);
         assert_eq!(val.0, 0x0000_3F00);
 
-        val = BitModeTransConfig(0x0).set_bm_cs_level(BMCsLevel::High);
-        assert_eq!(val.bm_cs_level(), BMCsLevel::High);
+        val = BitModeTransConfig(0x0).set_bm_cs_level(CsLevel::High);
+        assert_eq!(val.bm_cs_level(), CsLevel::High);
         assert_eq!(val.0, 0x0000_0080);
-        val = val.set_bm_cs_level(BMCsLevel::Low);
-        assert_eq!(val.bm_cs_level(), BMCsLevel::Low);
+        val = val.set_bm_cs_level(CsLevel::Low);
+        assert_eq!(val.bm_cs_level(), CsLevel::Low);
         assert_eq!(val.0, 0x0000_0000);
 
-        val = val.set_bm_cs_ctrl_mode(BMCsCtrlMode::Software);
-        assert_eq!(val.bm_cs_ctrl_mode(), BMCsCtrlMode::Software);
+        val = val.set_bm_cs_ctrl_mode(CsCtrlMode::Software);
+        assert_eq!(val.bm_cs_ctrl_mode(), CsCtrlMode::Software);
         assert_eq!(val.0, 0x0000_0040);
-        val = val.set_bm_cs_ctrl_mode(BMCsCtrlMode::SpiController);
-        assert_eq!(val.bm_cs_ctrl_mode(), BMCsCtrlMode::SpiController);
+        val = val.set_bm_cs_ctrl_mode(CsCtrlMode::SpiController);
+        assert_eq!(val.bm_cs_ctrl_mode(), CsCtrlMode::SpiController);
         assert_eq!(val.0, 0x0000_0000);
 
         val = val.set_bm_cs_pol(Polarity::IdleHigh);
@@ -2966,8 +2945,8 @@ mod tests {
         assert_eq!(val.bm_cs_pol(), Polarity::IdleLow);
         assert_eq!(val.0, 0x0000_0000);
 
-        val = val.set_bm_cs_pin(BMCsPin::Cs0);
-        assert_eq!(val.bm_cs_pin(), BMCsPin::Cs0);
+        val = val.set_bm_cs_pin(CsPin::Cs0);
+        assert_eq!(val.bm_cs_pin(), CsPin::Cs0);
         assert_eq!(val.0, 0x0000_0000);
 
         val = val.set_bus_mode(BusMode::QuadBits);
@@ -2981,11 +2960,18 @@ mod tests {
         assert_eq!(val.0, 0x0000_0000);
     }
 
-    test_should_panic!((
-        test_bm_trans_cfg_set_bm_rx_count_panic,
-        BitModeTransConfig(0x0).set_bm_rx_count(0x40),
-        "Bit-mode rx data length out of range (expected 0..=63)"
-    ));
+    test_should_panic!(
+        (
+            test_bm_trans_cfg_set_bm_cs_pin_panic,
+            BitModeTransConfig(0x0).set_bm_cs_pin(CsPin::Cs1),
+            "Only CS0 is supported in bit-mode"
+        ),
+        (
+            test_bm_trans_cfg_set_bm_rx_count_panic,
+            BitModeTransConfig(0x0).set_bm_rx_count(0x40),
+            "Bit-mode rx data length out of range (expected 0..=63)"
+        )
+    );
 
     test_should_panic!((
         test_bm_trans_cfg_set_bm_tx_count_panic,

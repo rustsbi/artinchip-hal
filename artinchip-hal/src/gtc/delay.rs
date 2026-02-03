@@ -1,7 +1,8 @@
 //! Timer delay source.
 
+use super::instance::Gtc;
 use super::register::{CntFreq, RegisterBlock};
-use crate::cmu;
+use crate::cmu::Cmu;
 
 /// Timer delay source.
 pub struct TimerDelay<'a> {
@@ -10,8 +11,8 @@ pub struct TimerDelay<'a> {
 
 impl<'a> TimerDelay<'a> {
     /// Create a new TimerDelay instance.
-    pub fn new(reg: &'a RegisterBlock, freq: CntFreq, cmu: &cmu::RegisterBlock) -> Self {
-        let clk = &cmu.clock_gtc;
+    pub fn new(reg: &'a RegisterBlock, freq: CntFreq, cmu: &Cmu) -> Self {
+        let clk = &cmu.register_block().clock_gtc;
         unsafe {
             // Initialize module clock.
             // Reference: https://aicdoc.artinchip.com/topics/ic/cmu/cmu-function2-d13x.html#topic_yvp_f24_4bc__table_qb3_bn5_ydc
@@ -57,5 +58,14 @@ impl<'a> TimerDelay<'a> {
     /// Delay ms.
     pub fn delay_ms(&self, ms: u64) {
         self.delay_us(ms * 1_000);
+    }
+
+    /// Free the TimerDelay and return GTC instance.
+    pub fn free(self, cmu: &Cmu) -> Gtc {
+        unsafe {
+            let clk = &cmu.register_block().clock_gtc;
+            clk.modify(|v| v.disable_bus_clk().enable_module_reset());
+        }
+        Gtc::__new(self.reg)
     }
 }

@@ -36,7 +36,7 @@ impl<const I: u8> UartExt<'static, I> for Uart<I> {
         tx: TX,
         rx: RX,
         config: UartConfig,
-        clk: &cmu::RegisterBlock,
+        clk: &cmu::Cmu,
     ) -> BlockingSerial<'static, I, TX, RX>
     where
         TX: UartPad<I> + Transmit<I>,

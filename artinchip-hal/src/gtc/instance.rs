@@ -3,10 +3,10 @@
 use super::delay::TimerDelay;
 use super::gtc_ext::GtcExt;
 use super::register::{CntFreq, RegisterBlock};
-use crate::cmu;
+use crate::cmu::Cmu;
 use core::marker::PhantomData;
 
-/// Generic Timer Counter.
+/// GTC instance.
 pub struct Gtc {
     reg: *const RegisterBlock,
     _private: PhantomData<()>,
@@ -28,7 +28,7 @@ impl Gtc {
 }
 
 impl GtcExt<'static> for Gtc {
-    fn new_timer_delay(self, freq: CntFreq, cmu: &cmu::RegisterBlock) -> TimerDelay<'static> {
+    fn new_timer_delay(self, freq: CntFreq, cmu: &Cmu) -> TimerDelay<'static> {
         TimerDelay::new(self.register_block(), freq, cmu)
     }
 }
