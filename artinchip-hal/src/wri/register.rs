@@ -7,7 +7,7 @@ use volatile_register::{RO, RW};
 pub struct RegisterBlock {
     /// Reset flag register (`RST_FLAG`).
     #[doc(alias = "RST_FLAG")]
-    pub reset_flag: RW<u32>,
+    pub reset_flag: RW<RstFlag>,
     _reserved0: [u8; 0xFF8],
     /// WRI version register (`WRI_VER`).
     #[doc(alias = "WRI_VER")]
@@ -27,6 +27,12 @@ impl RstFlag {
     const PIN_RST_FLAG: u32 = 0x1 << 8;
     const RTC_POR_FLAG: u32 = 0x1 << 1;
     const SYS_POR_FLAG: u32 = 0x1;
+
+    /// Clear all flags.
+    #[inline]
+    pub const fn clear_all(self) -> Self {
+        Self(0xFFFF_FFFF)
+    }
 
     /// Check if voltage comparator reset flag is set (`CMP_RST_FLAG`).
     #[doc(alias = "CMP_RST_FLAG")]
@@ -120,7 +126,9 @@ mod tests {
 
     #[test]
     fn struct_rst_flag_functions() {
-        let mut flag = RstFlag(0);
+        let mut flag = RstFlag(0).clear_all();
+        assert_eq!(flag.0, 0xFFFF_FFFF);
+        flag = RstFlag(0);
         assert!(!flag.cmp_rst_flag());
         flag = flag.clear_cmp_rst_flag();
         assert!(flag.cmp_rst_flag());
