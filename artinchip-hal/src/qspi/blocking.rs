@@ -11,23 +11,13 @@ use super::register::*;
 use crate::cmu::Cmu;
 use embedded_hal::spi::{MODE_1, MODE_3, Operation};
 
-pub struct BlockingQspi<'a, const I: u8, SCK, MOSI, MISO, CS, WP, HOLD>
+pub struct BlockingQspi<'a, const I: u8, PAD>
 where
-    SCK: QspiPad<I> + SerialClock<I>,
-    MOSI: QspiPad<I> + MasterOutSlaveIn<I>,
-    MISO: QspiPad<I> + MasterInSlaveOut<I>,
-    CS: QspiPad<I> + ChipSelect<I>,
-    WP: QspiPad<I> + WriteProtect<I>,
-    HOLD: QspiPad<I> + Hold<I>,
+    PAD: QspiPads<I>,
 {
     reg: &'a RegisterBlock,
     _config: QspiConfig,
-    sck: SCK,
-    mosi: Option<MOSI>,
-    miso: Option<MISO>,
-    cs: Option<CS>,
-    wp: Option<WP>,
-    hold: Option<HOLD>,
+    pad: PAD,
 }
 
 /// QSPI internal clock divider selection.
@@ -38,16 +28,9 @@ enum DividerSelect {
     Cdr2(u8),
 }
 
-#[allow(clippy::too_many_arguments)]
-impl<'a, const I: u8, SCK, MOSI, MISO, CS, WP, HOLD>
-    BlockingQspi<'a, I, SCK, MOSI, MISO, CS, WP, HOLD>
+impl<'a, const I: u8, PAD> BlockingQspi<'a, I, PAD>
 where
-    SCK: QspiPad<I> + SerialClock<I>,
-    MOSI: QspiPad<I> + MasterOutSlaveIn<I>,
-    MISO: QspiPad<I> + MasterInSlaveOut<I>,
-    CS: QspiPad<I> + ChipSelect<I>,
-    WP: QspiPad<I> + WriteProtect<I>,
-    HOLD: QspiPad<I> + Hold<I>,
+    PAD: QspiPads<I>,
 {
     const MAX_HZ: u32 = 133_000_000;
     const MIN_HZ: u32 = 3_000;
@@ -57,17 +40,7 @@ where
     const FIFO_DEPTH: u8 = 64;
 
     /// Create a new blocking QSPI interface.
-    pub fn new(
-        reg: &'a RegisterBlock,
-        sck: SCK,
-        mosi: Option<MOSI>,
-        miso: Option<MISO>,
-        cs: Option<CS>,
-        wp: Option<WP>,
-        hold: Option<HOLD>,
-        config: QspiConfig,
-        cmu: &Cmu,
-    ) -> Self {
+    pub fn new(reg: &'a RegisterBlock, pad: PAD, config: QspiConfig, cmu: &Cmu) -> Self {
         if config.mode == MODE_1 || config.mode == MODE_3 {
             panic!("QSPI only supports SPI modes 0 and 2");
         }
@@ -143,7 +116,7 @@ where
             reg.int_control.modify(|v| v.disable_all_int());
 
             // Configure transfer settings.
-            let cs_ctrl_mode = if cs.is_some() {
+            let cs_ctrl_mode = if config.cs_config.is_some() {
                 CsCtrlMode::SpiController
             } else {
                 CsCtrlMode::Software
@@ -240,12 +213,7 @@ where
         Self {
             reg,
             _config: config,
-            sck,
-            mosi,
-            miso,
-            cs,
-            wp,
-            hold,
+            pad,
         }
     }
 
@@ -405,19 +373,7 @@ where
     }
 
     /// Free the blocking QSPI and return QSPI instance and all pads.
-    #[allow(clippy::type_complexity)]
-    pub fn free(
-        self,
-        cmu: &Cmu,
-    ) -> (
-        Qspi<I>,
-        SCK,
-        Option<MOSI>,
-        Option<MISO>,
-        Option<CS>,
-        Option<WP>,
-        Option<HOLD>,
-    ) {
+    pub fn free(self, cmu: &Cmu) -> (Qspi<I>, PAD) {
         let clk = cmu.register_block();
         let qspi_clk = match I {
             0 => &clk.clock_qspi0,
@@ -435,40 +391,20 @@ where
             });
         }
 
-        (
-            Qspi::<I>::__new(self.reg as *const RegisterBlock),
-            self.sck,
-            self.mosi,
-            self.miso,
-            self.cs,
-            self.wp,
-            self.hold,
-        )
+        (Qspi::<I>::__new(self.reg as *const RegisterBlock), self.pad)
     }
 }
 
-impl<'a, const I: u8, SCK, MOSI, MISO, CS, WP, HOLD> embedded_hal::spi::ErrorType
-    for BlockingQspi<'a, I, SCK, MOSI, MISO, CS, WP, HOLD>
+impl<'a, const I: u8, PAD> embedded_hal::spi::ErrorType for BlockingQspi<'a, I, PAD>
 where
-    SCK: QspiPad<I> + SerialClock<I>,
-    MOSI: QspiPad<I> + MasterOutSlaveIn<I>,
-    MISO: QspiPad<I> + MasterInSlaveOut<I>,
-    CS: QspiPad<I> + ChipSelect<I>,
-    WP: QspiPad<I> + WriteProtect<I>,
-    HOLD: QspiPad<I> + Hold<I>,
+    PAD: QspiPads<I>,
 {
     type Error = core::convert::Infallible;
 }
 
-impl<'a, const I: u8, SCK, MOSI, MISO, CS, WP, HOLD> embedded_hal::spi::SpiBus
-    for BlockingQspi<'a, I, SCK, MOSI, MISO, CS, WP, HOLD>
+impl<'a, const I: u8, PAD> embedded_hal::spi::SpiBus for BlockingQspi<'a, I, PAD>
 where
-    SCK: QspiPad<I> + SerialClock<I>,
-    MOSI: QspiPad<I> + MasterOutSlaveIn<I>,
-    MISO: QspiPad<I> + MasterInSlaveOut<I>,
-    CS: QspiPad<I> + ChipSelect<I>,
-    WP: QspiPad<I> + WriteProtect<I>,
-    HOLD: QspiPad<I> + Hold<I>,
+    PAD: QspiPads<I>,
 {
     fn read(&mut self, words: &mut [u8]) -> Result<(), Self::Error> {
         if words.is_empty() {
@@ -521,15 +457,9 @@ where
     }
 }
 
-impl<'a, const I: u8, SCK, MOSI, MISO, CS, WP, HOLD> embedded_hal::spi::SpiDevice
-    for BlockingQspi<'a, I, SCK, MOSI, MISO, CS, WP, HOLD>
+impl<'a, const I: u8, PAD> embedded_hal::spi::SpiDevice for BlockingQspi<'a, I, PAD>
 where
-    SCK: QspiPad<I> + SerialClock<I>,
-    MOSI: QspiPad<I> + MasterOutSlaveIn<I>,
-    MISO: QspiPad<I> + MasterInSlaveOut<I>,
-    CS: QspiPad<I> + ChipSelect<I>,
-    WP: QspiPad<I> + WriteProtect<I>,
-    HOLD: QspiPad<I> + Hold<I>,
+    PAD: QspiPads<I>,
 {
     fn transaction(&mut self, operations: &mut [Operation<'_, u8>]) -> Result<(), Self::Error> {
         for op in operations.iter_mut() {

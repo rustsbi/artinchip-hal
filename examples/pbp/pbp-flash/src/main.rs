@@ -28,19 +28,20 @@ fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
     let mosi = p.gpiob.pb5.into_function::<2>();
 
     let cs = p.gpiob.pb2.into_pull_up_output();
-
-    writeln!(uart0, "Welcome to pbp flash example by artinchip-hal🦀!").ok();
-
-    let qspi0 = p.qspi0.new_blocking(
+    let qspi0_pad = (
         sck,
         Some(mosi),
         Some(miso),
         None::<NoPad>,
         None::<NoPad>,
         None::<NoPad>,
-        QspiConfig::nor_flash(),
-        &p.cmu,
     );
+
+    writeln!(uart0, "Welcome to pbp flash example by artinchip-hal🦀!").ok();
+
+    let qspi0 = p
+        .qspi0
+        .new_blocking(qspi0_pad, QspiConfig::nor_flash(), &p.cmu);
 
     writeln!(uart0, "QSPI initialized").ok();
 
@@ -60,8 +61,8 @@ fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
 
     match flash.manufacture_device_id() {
         Ok(id) => {
-            writeln!(uart0, "Manufacturer ID: 0x{}", id[0]).ok();
-            writeln!(uart0, "Device ID:       0x{}", id[1]).ok();
+            writeln!(uart0, "Manufacturer ID: 0x{:02X}", id[0]).ok();
+            writeln!(uart0, "Device ID:       0x{:02X}", id[1]).ok();
         }
         Err(e) => {
             writeln!(uart0, "ERROR: Failed to read ID: {:?}", e).ok();
@@ -97,23 +98,25 @@ fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
             let mut magic_num = [0u8; 4];
             match flash.read_data(0x0, &mut magic_num) {
                 Ok(_) => {
-                    writeln!(uart0, "Magic number1(expected: \"AIC \"):").ok();
+                    writeln!(uart0, "Magic number1(expected: \"AIC\"):").ok();
+                    write!(uart0, "\"").ok();
                     for i in 0..4 {
                         write!(uart0, "{}", magic_num[i] as char).ok();
                     }
-                    writeln!(uart0, "").ok();
+                    writeln!(uart0, "\"").ok();
                 }
                 Err(e) => {
                     writeln!(uart0, "ERROR: Failed to read magic number1: {:?}", e).ok();
                 }
             }
-            match flash.read_data(0xFF, &mut magic_num) {
+            match flash.read_data(0x100, &mut magic_num) {
                 Ok(_) => {
-                    writeln!(uart0, "Magic number2(expected: \"PBP \"):").ok();
+                    writeln!(uart0, "Magic number2(expected: \"PBP\"):").ok();
+                    write!(uart0, "\"").ok();
                     for i in 0..4 {
                         write!(uart0, "{}", magic_num[i] as char).ok();
                     }
-                    writeln!(uart0, "").ok();
+                    writeln!(uart0, "\"").ok();
                 }
                 Err(e) => {
                     writeln!(uart0, "ERROR: Failed to read magic number2: {:?}", e).ok();

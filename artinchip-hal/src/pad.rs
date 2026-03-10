@@ -1,7 +1,6 @@
 /// A no-op pad for flexible pin assignments.
 pub struct NoPad;
 
-impl<const I: u8> super::qspi::QspiPad<I> for NoPad {}
 impl<const I: u8> super::qspi::SerialClock<I> for NoPad {}
 impl<const I: u8> super::qspi::MasterInSlaveOut<I> for NoPad {}
 impl<const I: u8> super::qspi::MasterOutSlaveIn<I> for NoPad {}

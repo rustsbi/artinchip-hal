@@ -4,31 +4,28 @@ use embedded_hal::i2c::{Operation, SevenBitAddress, TenBitAddress};
 
 use super::config::{I2cConfig, Role};
 use super::instance::I2c;
-use super::pad::{I2cPad, SerialClock, SerialData};
+use super::pad::I2cPads;
 use super::register::{AddressMode, RegisterBlock, SpeedMode, TransferMode};
 use crate::cmu::Cmu;
 
 /// Blocking I2C interface.
-pub struct BlockingI2c<'a, const I: u8, SCL, SDA>
+pub struct BlockingI2c<'a, const I: u8, PAD>
 where
-    SCL: I2cPad<I> + SerialClock<I>,
-    SDA: I2cPad<I> + SerialData<I>,
+    PAD: I2cPads<I>,
 {
     reg: &'a RegisterBlock,
-    scl: SCL,
-    sda: SDA,
+    pad: PAD,
 }
 
-impl<'a, const I: u8, SCL, SDA> BlockingI2c<'a, I, SCL, SDA>
+impl<'a, const I: u8, PAD> BlockingI2c<'a, I, PAD>
 where
-    SCL: I2cPad<I> + SerialClock<I>,
-    SDA: I2cPad<I> + SerialData<I>,
+    PAD: I2cPads<I>,
 {
     // I2C fixed clock is 24Mhz.
     const I2C_DEFAULT_CLOCK: u32 = 24_000_000;
 
     /// Create a new blocking serial.
-    pub fn new(reg: &'a RegisterBlock, scl: SCL, sda: SDA, config: I2cConfig, cmu: &Cmu) -> Self {
+    pub fn new(reg: &'a RegisterBlock, pad: PAD, config: I2cConfig, cmu: &Cmu) -> Self {
         // Reference: https://aicdoc.artinchip.com/topics/ic/i2c/i2c-programming-guide-d13x.html
         let clk = cmu.register_block();
         let i2c_clk = match I {
@@ -89,7 +86,7 @@ where
             reg.enable.modify(|v| v.enable_i2c());
         }
 
-        Self { reg, scl, sda }
+        Self { reg, pad }
     }
 
     /// Set address.
@@ -152,7 +149,7 @@ where
     }
 
     /// Free the blocking I2C and return I2C instance, SCL and SDA pads.
-    pub fn free(self, cmu: &Cmu) -> (I2c<I>, SCL, SDA) {
+    pub fn free(self, cmu: &Cmu) -> (I2c<I>, PAD) {
         unsafe {
             let clk = cmu.register_block();
             let i2c_clk = match I {
@@ -163,23 +160,20 @@ where
             };
             i2c_clk.modify(|v| v.disable_bus_clk().enable_module_reset());
         }
-        (I2c::__new(self.reg), self.scl, self.sda)
+        (I2c::__new(self.reg), self.pad)
     }
 }
 
-impl<'a, const I: u8, SCL, SDA> embedded_hal::i2c::ErrorType for BlockingI2c<'a, I, SCL, SDA>
+impl<'a, const I: u8, PAD> embedded_hal::i2c::ErrorType for BlockingI2c<'a, I, PAD>
 where
-    SCL: I2cPad<I> + SerialClock<I>,
-    SDA: I2cPad<I> + SerialData<I>,
+    PAD: I2cPads<I>,
 {
     type Error = core::convert::Infallible;
 }
 
-impl<'a, const I: u8, SCL, SDA> embedded_hal::i2c::I2c<SevenBitAddress>
-    for BlockingI2c<'a, I, SCL, SDA>
+impl<'a, const I: u8, PAD> embedded_hal::i2c::I2c<SevenBitAddress> for BlockingI2c<'a, I, PAD>
 where
-    SCL: I2cPad<I> + SerialClock<I>,
-    SDA: I2cPad<I> + SerialData<I>,
+    PAD: I2cPads<I>,
 {
     fn transaction(
         &mut self,
@@ -249,11 +243,9 @@ where
     }
 }
 
-impl<'a, const I: u8, SCL, SDA> embedded_hal::i2c::I2c<TenBitAddress>
-    for BlockingI2c<'a, I, SCL, SDA>
+impl<'a, const I: u8, PAD> embedded_hal::i2c::I2c<TenBitAddress> for BlockingI2c<'a, I, PAD>
 where
-    SCL: I2cPad<I> + SerialClock<I>,
-    SDA: I2cPad<I> + SerialData<I>,
+    PAD: I2cPads<I>,
 {
     fn transaction(
         &mut self,

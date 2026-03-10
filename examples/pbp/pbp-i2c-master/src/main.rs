@@ -26,7 +26,9 @@ fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
 
     let mut uart0 = p.uart0.new_blocking(tx, rx, UartConfig::default(), &p.cmu);
 
-    let mut i2c2 = p.i2c2.new_blocking(scl, sda, I2cConfig::default(), &p.cmu);
+    let mut i2c2 = p
+        .i2c2
+        .new_blocking((scl, sda), I2cConfig::default(), &p.cmu);
 
     writeln!(
         uart0,

@@ -3,7 +3,7 @@
 use super::blocking::BlockingI2c;
 use super::config::I2cConfig;
 use super::i2c_ext::I2cExt;
-use super::pad::{I2cPad, SerialClock, SerialData};
+use super::pad::I2cPads;
 use super::register::RegisterBlock;
 use crate::cmu::Cmu;
 use core::marker::PhantomData;
@@ -30,17 +30,15 @@ impl<const I: u8> I2c<I> {
 }
 
 impl<const I: u8> I2cExt<'static, I> for I2c<I> {
-    fn new_blocking<SCL, SDA>(
+    fn new_blocking<PAD>(
         self,
-        scl: SCL,
-        sda: SDA,
+        pad: PAD,
         config: I2cConfig,
         cmu: &Cmu,
-    ) -> BlockingI2c<'static, I, SCL, SDA>
+    ) -> BlockingI2c<'static, I, PAD>
     where
-        SCL: I2cPad<I> + SerialClock<I>,
-        SDA: I2cPad<I> + SerialData<I>,
+        PAD: I2cPads<I>,
     {
-        BlockingI2c::new(self.register_block(), scl, sda, config, cmu)
+        BlockingI2c::new(self.register_block(), pad, config, cmu)
     }
 }

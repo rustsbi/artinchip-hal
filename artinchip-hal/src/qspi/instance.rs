@@ -31,35 +31,15 @@ impl<const I: u8> Qspi<I> {
 
 impl<const I: u8> QspiExt<'static, I> for Qspi<I> {
     /// Creates a blocking Q interface with the specified pads.
-    fn new_blocking<SCK, MOSI, MISO, CS, WP, HOLD>(
+    fn new_blocking<PAD>(
         self,
-        sck: SCK,
-        mosi: Option<MOSI>,
-        miso: Option<MISO>,
-        cs: Option<CS>,
-        wp: Option<WP>,
-        hold: Option<HOLD>,
+        pad: PAD,
         config: QspiConfig,
         cmu: &Cmu,
-    ) -> BlockingQspi<'static, I, SCK, MOSI, MISO, CS, WP, HOLD>
+    ) -> BlockingQspi<'static, I, PAD>
     where
-        SCK: QspiPad<I> + SerialClock<I>,
-        MOSI: QspiPad<I> + MasterOutSlaveIn<I>,
-        MISO: QspiPad<I> + MasterInSlaveOut<I>,
-        CS: QspiPad<I> + ChipSelect<I>,
-        WP: QspiPad<I> + WriteProtect<I>,
-        HOLD: QspiPad<I> + Hold<I>,
+        PAD: QspiPads<I>,
     {
-        BlockingQspi::new(
-            self.register_block(),
-            sck,
-            mosi,
-            miso,
-            cs,
-            wp,
-            hold,
-            config,
-            cmu,
-        )
+        BlockingQspi::new(self.register_block(), pad, config, cmu)
     }
 }
