@@ -36,30 +36,6 @@ impl<'a> TimerDelay<'a> {
         high | low
     }
 
-    /// Delay us.
-    pub fn delay_us(&self, us: u64) {
-        let one_sec_tick: u64 = match self.reg.cnt_status.read().fcack() {
-            CntFreq::Freq4M => 4_000_000,
-            CntFreq::Freq1M => 1_000_000,
-            CntFreq::Freq250k => 250_000,
-        };
-
-        let start_tick = self.get_tick();
-        let target_ticks = us * one_sec_tick / 1_000_000;
-
-        loop {
-            let elapsed_tick = self.get_tick().wrapping_sub(start_tick);
-            if elapsed_tick >= target_ticks {
-                break;
-            }
-        }
-    }
-
-    /// Delay ms.
-    pub fn delay_ms(&self, ms: u64) {
-        self.delay_us(ms * 1_000);
-    }
-
     /// Free the TimerDelay and return GTC instance.
     pub fn free(self, cmu: &Cmu) -> Gtc {
         unsafe {
@@ -67,5 +43,39 @@ impl<'a> TimerDelay<'a> {
             clk.modify(|v| v.disable_bus_clk().enable_module_reset());
         }
         Gtc::__new(self.reg)
+    }
+}
+
+impl embedded_hal::delay::DelayNs for TimerDelay<'_> {
+    fn delay_ns(&mut self, ns: u32) {
+        // Calculate the precision of each tick (in nanoseconds).
+        let tick_precision: u64 = match self.reg.cnt_status.read().fcack() {
+            CntFreq::Freq4M => 250,     // 4 MHz -> 250 ns per tick.
+            CntFreq::Freq1M => 1_000,   // 1 MHz -> 1 µs per tick.
+            CntFreq::Freq250k => 4_000, // 250 KHz -> 4 µs per tick.
+        };
+
+        // Adjust the requested time 'ns' to the nearest valid non-zero tick_multiple.
+        // Ensure a minimum delay of one tick if ns is 0 or smaller than tick_precision.
+        let adjusted_ns = if ns == 0 {
+            tick_precision // Minimum one tick if ns is 0.
+        } else {
+            // Round up to the nearest tick multiple using div_ceil.
+            (ns as u64).div_ceil(tick_precision) * tick_precision
+        };
+
+        // Convert the adjusted delay from nanoseconds to target ticks.
+        let target_ticks = adjusted_ns / tick_precision;
+
+        // Save the starting tick value.
+        let start_tick = self.get_tick();
+
+        // Poll the counter until the elapsed ticks meet or exceed the target ticks.
+        loop {
+            let elapsed_tick = self.get_tick().wrapping_sub(start_tick);
+            if elapsed_tick >= target_ticks {
+                break;
+            }
+        }
     }
 }

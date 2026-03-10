@@ -433,7 +433,7 @@ impl PllGeneral {
     /// Enable pll output to system (`PLL_OUT_SYS`).
     #[inline]
     #[doc(alias = "PLL_OUT_SYS")]
-    pub const fn enabled_pll_out2sys(self) -> Self {
+    pub const fn enable_pll_out2sys(self) -> Self {
         Self(self.0 | Self::PLL_OUT_SYS)
     }
     /// Disable pll output to system.
@@ -2330,7 +2330,7 @@ mod tests {
         assert!(!val.is_factor_m_enabled());
         assert_eq!(val.0, 0x0000_0000);
 
-        val = val.enabled_pll_out2sys();
+        val = val.enable_pll_out2sys();
         assert!(val.is_pll_out2sys_enabled());
         assert_eq!(val.0, 0x0004_0000);
 

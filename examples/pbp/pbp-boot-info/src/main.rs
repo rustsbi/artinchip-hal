@@ -15,7 +15,7 @@ fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
     let rx = p.gpioa.pa1.into_function::<5>();
 
     let mut uart0 = p.uart0.new_blocking(tx, rx, UartConfig::default(), &p.cmu);
-    let delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &p.cmu);
+    let mut delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &p.cmu);
 
     let reset_info = p.wri.new_reset_info();
     let time = p.rtc.new_real_time(&p.cmu);

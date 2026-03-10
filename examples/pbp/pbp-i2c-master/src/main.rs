@@ -22,7 +22,7 @@ fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
     let mut touch_rst = p.gpioa.pa10.into_pull_up_output();
     let mut touch_int = p.gpioa.pa11.into_pull_up_output();
 
-    let delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &p.cmu);
+    let mut delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &p.cmu);
 
     let mut uart0 = p.uart0.new_blocking(tx, rx, UartConfig::default(), &p.cmu);
 
