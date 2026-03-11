@@ -1,6 +1,8 @@
 //! WRI instance.
 
+use super::info::ResetInfo;
 use super::register::RegisterBlock;
+use super::wri_ext::WriExt;
 use core::marker::PhantomData;
 
 /// WRI instance.
@@ -21,5 +23,11 @@ impl Wri {
     /// Get a reference to the register block.
     pub const fn register_block(&self) -> &'static RegisterBlock {
         unsafe { &*self.reg }
+    }
+}
+
+impl WriExt<'static> for Wri {
+    fn new_reset_info(self) -> ResetInfo<'static> {
+        ResetInfo::new(self.register_block())
     }
 }

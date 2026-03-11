@@ -1,0 +1,18 @@
+[package]
+name = "pbp-flash"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+panic-halt = "1.0.0"
+embedded-io = "0.7.1"
+embedded-time = "0.12.1"
+embedded-hal = "1.0.0"
+artinchip-hal = { version = "0.0.0", path = "../../../artinchip-hal" }
+artinchip-rt = { version = "0.0.0", path = "../../../artinchip-rt" }
+w25qxxxjv = { git = "https://github.com/CosmoBunny/w25qxxxjv.git", branch = "main" }
+
+[features]
+default = ["d13x"]
+d13x = ["artinchip-rt/d13x", "artinchip-hal/d13x"]
+# TODO other features for all the chips.

@@ -12,4 +12,5 @@ pub use blocking::*;
 pub use config::*;
 pub use i2c_ext::I2cExt;
 pub use instance::I2c;
+pub use pad::*;
 pub use register::*;

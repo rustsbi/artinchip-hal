@@ -119,10 +119,10 @@ pub enum AccessMode {
     AXI,
 }
 
-/// Controller work mode.
+/// Controller mode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
-pub enum WorkMode {
+pub enum CtrlMode {
     Slave,
     Master,
 }
@@ -221,20 +221,20 @@ impl Config {
             _ => unreachable!(),
         }
     }
-    /// Set controller work mode (`CTRL_MODE_SEL`).
+    /// Set controller mode (`CTRL_MODE_SEL`).
     ///
     /// Not writable when `START` = 1.
     #[doc(alias = "CTRL_MODE_SEL")]
     #[inline]
-    pub const fn set_work_mode(self, mode: WorkMode) -> Self {
+    pub const fn set_ctrl_mode(self, mode: CtrlMode) -> Self {
         Self((self.0 & !Self::CTRL_MODE_SEL) | (Self::CTRL_MODE_SEL & ((mode as u32) << 1)))
     }
-    /// Get controller work mode.
+    /// Get controller mode.
     #[inline]
-    pub const fn work_mode(self) -> WorkMode {
+    pub const fn ctrl_mode(self) -> CtrlMode {
         match (self.0 & Self::CTRL_MODE_SEL) >> 1 {
-            0 => WorkMode::Slave,
-            1 => WorkMode::Master,
+            0 => CtrlMode::Slave,
+            1 => CtrlMode::Master,
             _ => unreachable!(),
         }
     }
@@ -648,6 +648,12 @@ impl IntControl {
     const RF_EMP_INTE: u32 = 0x1 << 1;
     const RF_RDY_INTE: u32 = 0x1;
 
+    /// Disable all interrupts.
+    #[inline]
+    pub const fn disable_all_int(self) -> Self {
+        Self(0)
+    }
+
     /// Enable internal dma tx done interrupt (`TXIDMA_DONE_INTE`).
     #[doc(alias = "TXIDMA_DONE_INTE")]
     #[inline]
@@ -996,6 +1002,12 @@ impl IntStatus {
     const RF_FULL: u32 = 0x1 << 2;
     const RF_EMP: u32 = 0x1 << 1;
     const RF_READY: u32 = 0x1;
+
+    /// Clear all interrupts.
+    #[inline]
+    pub const fn clear_all_int(self) -> Self {
+        Self(0xFFFF_FFFF)
+    }
 
     /// Check if internal dma tx done interrupt is pending (`TXIDMA_DONE`).
     #[doc(alias = "TXIDMA_DONE")]
@@ -2377,11 +2389,11 @@ mod tests {
         assert_eq!(val.access_mode(), AccessMode::AHB);
         assert_eq!(val.0, 0x0000_0000);
 
-        val = val.set_work_mode(WorkMode::Master);
-        assert_eq!(val.work_mode(), WorkMode::Master);
+        val = val.set_ctrl_mode(CtrlMode::Master);
+        assert_eq!(val.ctrl_mode(), CtrlMode::Master);
         assert_eq!(val.0, 0x0000_0002);
-        val = val.set_work_mode(WorkMode::Slave);
-        assert_eq!(val.work_mode(), WorkMode::Slave);
+        val = val.set_ctrl_mode(CtrlMode::Slave);
+        assert_eq!(val.ctrl_mode(), CtrlMode::Slave);
         assert_eq!(val.0, 0x0000_0000);
 
         val = val.enable_ctrl();
@@ -2516,7 +2528,10 @@ mod tests {
 
     #[test]
     fn struct_int_control_functions() {
-        let mut val = IntControl(0x0).enable_tx_dma_done_int();
+        let mut val = IntControl(0x0).disable_all_int();
+        assert_eq!(val.0, 0x0000_0000);
+
+        val = val.enable_tx_dma_done_int();
         assert!(val.is_tx_dma_done_int_enabled());
         assert_eq!(val.0, 0x0080_0000);
         val = val.disable_tx_dma_done_int();
@@ -2659,7 +2674,10 @@ mod tests {
 
     #[test]
     fn struct_int_status_functions() {
-        let mut val = IntStatus(0x0).clear_tx_dma_done_int();
+        let mut val = IntStatus(0x0).clear_all_int();
+        assert_eq!(val.0, 0xFFFF_FFFF);
+
+        val = IntStatus(0x0).clear_tx_dma_done_int();
         assert!(val.is_tx_dma_done_int_pending());
         assert_eq!(val.0, 0x0080_0000);
 

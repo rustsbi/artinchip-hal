@@ -10,6 +10,7 @@ pub mod dma;
 pub mod gpio;
 pub mod gtc;
 pub mod i2c;
+pub mod pad;
 pub mod qspi;
 pub mod rtc;
 pub mod sdmc;
@@ -24,9 +25,18 @@ mod macros;
 
 /// ArtInChip HAL prelude.
 pub mod prelude {
+    pub use crate::pad::NoPad;
+    pub use crate::traits::*;
+}
+
+/// ArtInChip HAL traits.
+pub mod traits {
     pub use crate::gpio::PadExt as _;
     pub use crate::gtc::GtcExt as _;
+    pub use crate::rtc::RtcExt as _;
     pub use crate::uart::UartExt as _;
+    pub use crate::wri::WriExt as _;
+    pub use embedded_hal::delay::DelayNs as _;
     pub use embedded_hal::digital::{InputPin as _, OutputPin as _, StatefulOutputPin as _};
     pub use embedded_hal::i2c::I2c as _;
 }
