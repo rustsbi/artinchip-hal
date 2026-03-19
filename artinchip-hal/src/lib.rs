@@ -31,6 +31,7 @@ pub mod prelude {
 
 /// ArtInChip HAL traits.
 pub mod traits {
+    pub use crate::dma::DmaExt as _;
     pub use crate::gpio::PadExt as _;
     pub use crate::gtc::GtcExt as _;
     pub use crate::rtc::RtcExt as _;

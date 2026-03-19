@@ -11,6 +11,7 @@ authors = [
 artinchip-rt-macros = { version = "0.0.0", path = "macros" }
 artinchip-hal = { version = "0.0.0", path = "../artinchip-hal" }
 paste = "1.0"
+xuantie-riscv = { git = "https://github.com/rustsbi/xuantie.git", branch = "main" }
 
 [features]
 d12x = []

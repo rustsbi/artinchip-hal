@@ -8,5 +8,6 @@ members = [
     "examples/pbp/pbp-i2c-master",
     "examples/pbp/pbp-boot-info",
     "examples/pbp/pbp-flash",
+    "examples/pbp/pbp-dma",
 ]
 resolver = "3"
