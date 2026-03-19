@@ -64,13 +64,14 @@ jobs:
           name: coverage-report-html
           path: ./coverage-report/
 
-  clippy:
-    name: Clippy Check
+  clippy-hal-rt:
+    name: Clippy Check artinchip-hal and artinchip-rt
     needs: fmt
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        PACKAGE: [artinchip-hal, artinchip-rt, aicfwc]
+        PACKAGE: [artinchip-hal, artinchip-rt]
+        FEATURES: [d12x, d13x, d21x, g73x, m6800]
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -78,7 +79,20 @@ jobs:
           toolchain: stable
           components: clippy
       - name: Run cargo clippy
-        run: cargo clippy -p ${{ matrix.PACKAGE }} --all-targets --all-features -- -D warnings
+        run: cargo clippy -p ${{ matrix.PACKAGE }} --all-targets --features ${{ matrix.FEATURES }} -- -D warnings
+
+  clippy-aicfwc:
+     name: Clippy Check aicfwc
+     needs: fmt
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+       - uses: actions-rust-lang/setup-rust-toolchain@v1
+         with:
+           toolchain: stable
+           components: clippy
+       - name: Run cargo clippy for aicfwc
+         run: cargo clippy -p aicfwc --all-targets --all-features -- -D warnings
 
   audit:
     name: Security Audit
@@ -101,7 +115,7 @@ jobs:
     strategy:
       matrix:
         FEATURES: [d13x]
-        EXAMPLES: [pbp-blinky, pbp-hello-world, pbp-i2c-master, pbp-boot-info, pbp-flash]
+        EXAMPLES: [pbp-blinky, pbp-hello-world, pbp-i2c-master, pbp-boot-info, pbp-flash, pbp-dma]
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1

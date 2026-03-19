@@ -5,6 +5,7 @@ pub use artinchip_rt_macros::pbp_entry;
 
 #[macro_use]
 pub mod marcos;
+pub mod core;
 pub mod pbp;
 pub mod soc;
 

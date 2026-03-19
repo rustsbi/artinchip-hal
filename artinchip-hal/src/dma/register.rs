@@ -69,20 +69,6 @@ pub struct DmaCh {
     _reserved1: [u8; 0x8],
 }
 
-/// Dma Channel.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
-pub enum DmaChannel {
-    Ch0,
-    Ch1,
-    Ch2,
-    Ch3,
-    Ch4,
-    Ch5,
-    Ch6,
-    Ch7,
-}
-
 /// DMA interrupt request enable register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -124,181 +110,193 @@ impl IntEnable {
 
     /// Enable channel address request error interrupt.
     #[inline]
-    pub const fn enable_channel_addr_req_err(self, channel: DmaChannel) -> Self {
+    pub const fn enable_channel_addr_req_err(self, channel: u8) -> Self {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch1 => Self::CH1_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch2 => Self::CH2_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch3 => Self::CH3_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch4 => Self::CH4_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch5 => Self::CH5_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch6 => Self::CH6_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch7 => Self::CH7_ADDR_REQ_ERR_EN,
+            0x0 => Self::CH0_ADDR_REQ_ERR_EN,
+            0x1 => Self::CH1_ADDR_REQ_ERR_EN,
+            0x2 => Self::CH2_ADDR_REQ_ERR_EN,
+            0x3 => Self::CH3_ADDR_REQ_ERR_EN,
+            0x4 => Self::CH4_ADDR_REQ_ERR_EN,
+            0x5 => Self::CH5_ADDR_REQ_ERR_EN,
+            0x6 => Self::CH6_ADDR_REQ_ERR_EN,
+            0x7 => Self::CH7_ADDR_REQ_ERR_EN,
+            _ => unreachable!(),
         };
         Self(self.0 | mask)
     }
     /// Disable channel address request error interrupt.
     #[inline]
-    pub const fn disable_channel_addr_req_err(self, channel: DmaChannel) -> Self {
+    pub const fn disable_channel_addr_req_err(self, channel: u8) -> Self {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch1 => Self::CH1_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch2 => Self::CH2_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch3 => Self::CH3_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch4 => Self::CH4_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch5 => Self::CH5_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch6 => Self::CH6_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch7 => Self::CH7_ADDR_REQ_ERR_EN,
+            0x0 => Self::CH0_ADDR_REQ_ERR_EN,
+            0x1 => Self::CH1_ADDR_REQ_ERR_EN,
+            0x2 => Self::CH2_ADDR_REQ_ERR_EN,
+            0x3 => Self::CH3_ADDR_REQ_ERR_EN,
+            0x4 => Self::CH4_ADDR_REQ_ERR_EN,
+            0x5 => Self::CH5_ADDR_REQ_ERR_EN,
+            0x6 => Self::CH6_ADDR_REQ_ERR_EN,
+            0x7 => Self::CH7_ADDR_REQ_ERR_EN,
+            _ => unreachable!(),
         };
         Self(self.0 & !mask)
     }
     /// Check if channel address request error interrupt is enabled.
     #[inline]
-    pub const fn is_addr_req_err_enabled(self, channel: DmaChannel) -> bool {
+    pub const fn is_addr_req_err_enabled(self, channel: u8) -> bool {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch1 => Self::CH1_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch2 => Self::CH2_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch3 => Self::CH3_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch4 => Self::CH4_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch5 => Self::CH5_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch6 => Self::CH6_ADDR_REQ_ERR_EN,
-            DmaChannel::Ch7 => Self::CH7_ADDR_REQ_ERR_EN,
+            0x0 => Self::CH0_ADDR_REQ_ERR_EN,
+            0x1 => Self::CH1_ADDR_REQ_ERR_EN,
+            0x2 => Self::CH2_ADDR_REQ_ERR_EN,
+            0x3 => Self::CH3_ADDR_REQ_ERR_EN,
+            0x4 => Self::CH4_ADDR_REQ_ERR_EN,
+            0x5 => Self::CH5_ADDR_REQ_ERR_EN,
+            0x6 => Self::CH6_ADDR_REQ_ERR_EN,
+            0x7 => Self::CH7_ADDR_REQ_ERR_EN,
+            _ => unreachable!(),
         };
         (self.0 & mask) != 0
     }
     /// Enable channel all finish interrupt.
     #[inline]
-    pub const fn enable_channel_all_finish(self, channel: DmaChannel) -> Self {
+    pub const fn enable_channel_all_finish(self, channel: u8) -> Self {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch1 => Self::CH1_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch2 => Self::CH2_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch3 => Self::CH3_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch4 => Self::CH4_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch5 => Self::CH5_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch6 => Self::CH6_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch7 => Self::CH7_ALL_FINISH_IRQ_EN,
+            0x0 => Self::CH0_ALL_FINISH_IRQ_EN,
+            0x1 => Self::CH1_ALL_FINISH_IRQ_EN,
+            0x2 => Self::CH2_ALL_FINISH_IRQ_EN,
+            0x3 => Self::CH3_ALL_FINISH_IRQ_EN,
+            0x4 => Self::CH4_ALL_FINISH_IRQ_EN,
+            0x5 => Self::CH5_ALL_FINISH_IRQ_EN,
+            0x6 => Self::CH6_ALL_FINISH_IRQ_EN,
+            0x7 => Self::CH7_ALL_FINISH_IRQ_EN,
+            _ => unreachable!(),
         };
         Self(self.0 | mask)
     }
     /// Disable channel all finish interrupt.
     #[inline]
-    pub const fn disable_channel_all_finish(self, channel: DmaChannel) -> Self {
+    pub const fn disable_channel_all_finish(self, channel: u8) -> Self {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch1 => Self::CH1_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch2 => Self::CH2_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch3 => Self::CH3_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch4 => Self::CH4_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch5 => Self::CH5_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch6 => Self::CH6_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch7 => Self::CH7_ALL_FINISH_IRQ_EN,
+            0x0 => Self::CH0_ALL_FINISH_IRQ_EN,
+            0x1 => Self::CH1_ALL_FINISH_IRQ_EN,
+            0x2 => Self::CH2_ALL_FINISH_IRQ_EN,
+            0x3 => Self::CH3_ALL_FINISH_IRQ_EN,
+            0x4 => Self::CH4_ALL_FINISH_IRQ_EN,
+            0x5 => Self::CH5_ALL_FINISH_IRQ_EN,
+            0x6 => Self::CH6_ALL_FINISH_IRQ_EN,
+            0x7 => Self::CH7_ALL_FINISH_IRQ_EN,
+            _ => unreachable!(),
         };
         Self(self.0 & !mask)
     }
     /// Check if channel all finish interrupt is enabled.
     #[inline]
-    pub const fn is_all_finish_enabled(self, channel: DmaChannel) -> bool {
+    pub const fn is_all_finish_enabled(self, channel: u8) -> bool {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch1 => Self::CH1_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch2 => Self::CH2_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch3 => Self::CH3_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch4 => Self::CH4_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch5 => Self::CH5_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch6 => Self::CH6_ALL_FINISH_IRQ_EN,
-            DmaChannel::Ch7 => Self::CH7_ALL_FINISH_IRQ_EN,
+            0x0 => Self::CH0_ALL_FINISH_IRQ_EN,
+            0x1 => Self::CH1_ALL_FINISH_IRQ_EN,
+            0x2 => Self::CH2_ALL_FINISH_IRQ_EN,
+            0x3 => Self::CH3_ALL_FINISH_IRQ_EN,
+            0x4 => Self::CH4_ALL_FINISH_IRQ_EN,
+            0x5 => Self::CH5_ALL_FINISH_IRQ_EN,
+            0x6 => Self::CH6_ALL_FINISH_IRQ_EN,
+            0x7 => Self::CH7_ALL_FINISH_IRQ_EN,
+            _ => unreachable!(),
         };
         (self.0 & mask) != 0
     }
     /// Enable channel task finish interrupt.
     #[inline]
-    pub const fn enable_channel_task_finish(self, channel: DmaChannel) -> Self {
+    pub const fn enable_channel_task_finish(self, channel: u8) -> Self {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch1 => Self::CH1_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch2 => Self::CH2_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch3 => Self::CH3_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch4 => Self::CH4_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch5 => Self::CH5_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch6 => Self::CH6_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch7 => Self::CH7_TASK_FINISH_IRQ_EN,
+            0x0 => Self::CH0_TASK_FINISH_IRQ_EN,
+            0x1 => Self::CH1_TASK_FINISH_IRQ_EN,
+            0x2 => Self::CH2_TASK_FINISH_IRQ_EN,
+            0x3 => Self::CH3_TASK_FINISH_IRQ_EN,
+            0x4 => Self::CH4_TASK_FINISH_IRQ_EN,
+            0x5 => Self::CH5_TASK_FINISH_IRQ_EN,
+            0x6 => Self::CH6_TASK_FINISH_IRQ_EN,
+            0x7 => Self::CH7_TASK_FINISH_IRQ_EN,
+            _ => unreachable!(),
         };
         Self(self.0 | mask)
     }
     /// Disable channel task finish interrupt.
     #[inline]
-    pub const fn disable_channel_task_finish(self, channel: DmaChannel) -> Self {
+    pub const fn disable_channel_task_finish(self, channel: u8) -> Self {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch1 => Self::CH1_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch2 => Self::CH2_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch3 => Self::CH3_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch4 => Self::CH4_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch5 => Self::CH5_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch6 => Self::CH6_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch7 => Self::CH7_TASK_FINISH_IRQ_EN,
+            0x0 => Self::CH0_TASK_FINISH_IRQ_EN,
+            0x1 => Self::CH1_TASK_FINISH_IRQ_EN,
+            0x2 => Self::CH2_TASK_FINISH_IRQ_EN,
+            0x3 => Self::CH3_TASK_FINISH_IRQ_EN,
+            0x4 => Self::CH4_TASK_FINISH_IRQ_EN,
+            0x5 => Self::CH5_TASK_FINISH_IRQ_EN,
+            0x6 => Self::CH6_TASK_FINISH_IRQ_EN,
+            0x7 => Self::CH7_TASK_FINISH_IRQ_EN,
+            _ => unreachable!(),
         };
         Self(self.0 & !mask)
     }
     /// Check if channel task finish interrupt is enabled.
     #[inline]
-    pub const fn is_task_finish_enabled(self, channel: DmaChannel) -> bool {
+    pub const fn is_task_finish_enabled(self, channel: u8) -> bool {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch1 => Self::CH1_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch2 => Self::CH2_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch3 => Self::CH3_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch4 => Self::CH4_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch5 => Self::CH5_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch6 => Self::CH6_TASK_FINISH_IRQ_EN,
-            DmaChannel::Ch7 => Self::CH7_TASK_FINISH_IRQ_EN,
+            0x0 => Self::CH0_TASK_FINISH_IRQ_EN,
+            0x1 => Self::CH1_TASK_FINISH_IRQ_EN,
+            0x2 => Self::CH2_TASK_FINISH_IRQ_EN,
+            0x3 => Self::CH3_TASK_FINISH_IRQ_EN,
+            0x4 => Self::CH4_TASK_FINISH_IRQ_EN,
+            0x5 => Self::CH5_TASK_FINISH_IRQ_EN,
+            0x6 => Self::CH6_TASK_FINISH_IRQ_EN,
+            0x7 => Self::CH7_TASK_FINISH_IRQ_EN,
+            _ => unreachable!(),
         };
         (self.0 & mask) != 0
     }
     /// Enable channel task half interrupt.
     #[inline]
-    pub const fn enable_channel_task_half(self, channel: DmaChannel) -> Self {
+    pub const fn enable_channel_task_half(self, channel: u8) -> Self {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch1 => Self::CH1_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch2 => Self::CH2_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch3 => Self::CH3_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch4 => Self::CH4_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch5 => Self::CH5_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch6 => Self::CH6_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch7 => Self::CH7_TASK_HALF_IRQ_EN,
+            0x0 => Self::CH0_TASK_HALF_IRQ_EN,
+            0x1 => Self::CH1_TASK_HALF_IRQ_EN,
+            0x2 => Self::CH2_TASK_HALF_IRQ_EN,
+            0x3 => Self::CH3_TASK_HALF_IRQ_EN,
+            0x4 => Self::CH4_TASK_HALF_IRQ_EN,
+            0x5 => Self::CH5_TASK_HALF_IRQ_EN,
+            0x6 => Self::CH6_TASK_HALF_IRQ_EN,
+            0x7 => Self::CH7_TASK_HALF_IRQ_EN,
+            _ => unreachable!(),
         };
         Self(self.0 | mask)
     }
     /// Disable channel task half interrupt.
     #[inline]
-    pub const fn disable_channel_task_half(self, channel: DmaChannel) -> Self {
+    pub const fn disable_channel_task_half(self, channel: u8) -> Self {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch1 => Self::CH1_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch2 => Self::CH2_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch3 => Self::CH3_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch4 => Self::CH4_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch5 => Self::CH5_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch6 => Self::CH6_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch7 => Self::CH7_TASK_HALF_IRQ_EN,
+            0x0 => Self::CH0_TASK_HALF_IRQ_EN,
+            0x1 => Self::CH1_TASK_HALF_IRQ_EN,
+            0x2 => Self::CH2_TASK_HALF_IRQ_EN,
+            0x3 => Self::CH3_TASK_HALF_IRQ_EN,
+            0x4 => Self::CH4_TASK_HALF_IRQ_EN,
+            0x5 => Self::CH5_TASK_HALF_IRQ_EN,
+            0x6 => Self::CH6_TASK_HALF_IRQ_EN,
+            0x7 => Self::CH7_TASK_HALF_IRQ_EN,
+            _ => unreachable!(),
         };
         Self(self.0 & !mask)
     }
     /// Check if channel task half interrupt is enabled.
     #[inline]
-    pub const fn is_task_half_enabled(self, channel: DmaChannel) -> bool {
+    pub const fn is_task_half_enabled(self, channel: u8) -> bool {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch1 => Self::CH1_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch2 => Self::CH2_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch3 => Self::CH3_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch4 => Self::CH4_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch5 => Self::CH5_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch6 => Self::CH6_TASK_HALF_IRQ_EN,
-            DmaChannel::Ch7 => Self::CH7_TASK_HALF_IRQ_EN,
+            0x0 => Self::CH0_TASK_HALF_IRQ_EN,
+            0x1 => Self::CH1_TASK_HALF_IRQ_EN,
+            0x2 => Self::CH2_TASK_HALF_IRQ_EN,
+            0x3 => Self::CH3_TASK_HALF_IRQ_EN,
+            0x4 => Self::CH4_TASK_HALF_IRQ_EN,
+            0x5 => Self::CH5_TASK_HALF_IRQ_EN,
+            0x6 => Self::CH6_TASK_HALF_IRQ_EN,
+            0x7 => Self::CH7_TASK_HALF_IRQ_EN,
+            _ => unreachable!(),
         };
         (self.0 & mask) != 0
     }
@@ -345,121 +343,129 @@ impl IntStatus {
 
     /// Check if channel address request error interrupt is pending.
     #[inline]
-    pub const fn is_addr_req_err_pending(self, channel: DmaChannel) -> bool {
+    pub const fn is_addr_req_err_pending(self, channel: u8) -> bool {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_ADDR_REQ_ERR_STA,
-            DmaChannel::Ch1 => Self::CH1_ADDR_REQ_ERR_STA,
-            DmaChannel::Ch2 => Self::CH2_ADDR_REQ_ERR_STA,
-            DmaChannel::Ch3 => Self::CH3_ADDR_REQ_ERR_STA,
-            DmaChannel::Ch4 => Self::CH4_ADDR_REQ_ERR_STA,
-            DmaChannel::Ch5 => Self::CH5_ADDR_REQ_ERR_STA,
-            DmaChannel::Ch6 => Self::CH6_ADDR_REQ_ERR_STA,
-            DmaChannel::Ch7 => Self::CH7_ADDR_REQ_ERR_STA,
+            0x0 => Self::CH0_ADDR_REQ_ERR_STA,
+            0x1 => Self::CH1_ADDR_REQ_ERR_STA,
+            0x2 => Self::CH2_ADDR_REQ_ERR_STA,
+            0x3 => Self::CH3_ADDR_REQ_ERR_STA,
+            0x4 => Self::CH4_ADDR_REQ_ERR_STA,
+            0x5 => Self::CH5_ADDR_REQ_ERR_STA,
+            0x6 => Self::CH6_ADDR_REQ_ERR_STA,
+            0x7 => Self::CH7_ADDR_REQ_ERR_STA,
+            _ => unreachable!(),
         };
         (self.0 & mask) != 0
     }
     /// Clear channel address request error interrupt pending flag.
     #[inline]
-    pub const fn clear_addr_req_err_pending(self, channel: DmaChannel) -> Self {
+    pub const fn clear_addr_req_err_pending(self, channel: u8) -> Self {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_ADDR_REQ_ERR_STA,
-            DmaChannel::Ch1 => Self::CH1_ADDR_REQ_ERR_STA,
-            DmaChannel::Ch2 => Self::CH2_ADDR_REQ_ERR_STA,
-            DmaChannel::Ch3 => Self::CH3_ADDR_REQ_ERR_STA,
-            DmaChannel::Ch4 => Self::CH4_ADDR_REQ_ERR_STA,
-            DmaChannel::Ch5 => Self::CH5_ADDR_REQ_ERR_STA,
-            DmaChannel::Ch6 => Self::CH6_ADDR_REQ_ERR_STA,
-            DmaChannel::Ch7 => Self::CH7_ADDR_REQ_ERR_STA,
+            0x0 => Self::CH0_ADDR_REQ_ERR_STA,
+            0x1 => Self::CH1_ADDR_REQ_ERR_STA,
+            0x2 => Self::CH2_ADDR_REQ_ERR_STA,
+            0x3 => Self::CH3_ADDR_REQ_ERR_STA,
+            0x4 => Self::CH4_ADDR_REQ_ERR_STA,
+            0x5 => Self::CH5_ADDR_REQ_ERR_STA,
+            0x6 => Self::CH6_ADDR_REQ_ERR_STA,
+            0x7 => Self::CH7_ADDR_REQ_ERR_STA,
+            _ => unreachable!(),
         };
         Self(self.0 | mask)
     }
     /// Check if channel all finish interrupt is pending.
     #[inline]
-    pub const fn is_all_finish_pending(self, channel: DmaChannel) -> bool {
+    pub const fn is_all_finish_pending(self, channel: u8) -> bool {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_ALL_FINISH_IRQ_STA,
-            DmaChannel::Ch1 => Self::CH1_ALL_FINISH_IRQ_STA,
-            DmaChannel::Ch2 => Self::CH2_ALL_FINISH_IRQ_STA,
-            DmaChannel::Ch3 => Self::CH3_ALL_FINISH_IRQ_STA,
-            DmaChannel::Ch4 => Self::CH4_ALL_FINISH_IRQ_STA,
-            DmaChannel::Ch5 => Self::CH5_ALL_FINISH_IRQ_STA,
-            DmaChannel::Ch6 => Self::CH6_ALL_FINISH_IRQ_STA,
-            DmaChannel::Ch7 => Self::CH7_ALL_FINISH_IRQ_STA,
+            0x0 => Self::CH0_ALL_FINISH_IRQ_STA,
+            0x1 => Self::CH1_ALL_FINISH_IRQ_STA,
+            0x2 => Self::CH2_ALL_FINISH_IRQ_STA,
+            0x3 => Self::CH3_ALL_FINISH_IRQ_STA,
+            0x4 => Self::CH4_ALL_FINISH_IRQ_STA,
+            0x5 => Self::CH5_ALL_FINISH_IRQ_STA,
+            0x6 => Self::CH6_ALL_FINISH_IRQ_STA,
+            0x7 => Self::CH7_ALL_FINISH_IRQ_STA,
+            _ => unreachable!(),
         };
         (self.0 & mask) != 0
     }
     /// Clear channel all finish interrupt pending flag.
     #[inline]
-    pub const fn clear_all_finish_pending(self, channel: DmaChannel) -> Self {
+    pub const fn clear_all_finish_pending(self, channel: u8) -> Self {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_ALL_FINISH_IRQ_STA,
-            DmaChannel::Ch1 => Self::CH1_ALL_FINISH_IRQ_STA,
-            DmaChannel::Ch2 => Self::CH2_ALL_FINISH_IRQ_STA,
-            DmaChannel::Ch3 => Self::CH3_ALL_FINISH_IRQ_STA,
-            DmaChannel::Ch4 => Self::CH4_ALL_FINISH_IRQ_STA,
-            DmaChannel::Ch5 => Self::CH5_ALL_FINISH_IRQ_STA,
-            DmaChannel::Ch6 => Self::CH6_ALL_FINISH_IRQ_STA,
-            DmaChannel::Ch7 => Self::CH7_ALL_FINISH_IRQ_STA,
+            0x0 => Self::CH0_ALL_FINISH_IRQ_STA,
+            0x1 => Self::CH1_ALL_FINISH_IRQ_STA,
+            0x2 => Self::CH2_ALL_FINISH_IRQ_STA,
+            0x3 => Self::CH3_ALL_FINISH_IRQ_STA,
+            0x4 => Self::CH4_ALL_FINISH_IRQ_STA,
+            0x5 => Self::CH5_ALL_FINISH_IRQ_STA,
+            0x6 => Self::CH6_ALL_FINISH_IRQ_STA,
+            0x7 => Self::CH7_ALL_FINISH_IRQ_STA,
+            _ => unreachable!(),
         };
         Self(self.0 | mask)
     }
     /// Check if channel task finish interrupt is pending.
     #[inline]
-    pub const fn is_task_finish_pending(self, channel: DmaChannel) -> bool {
+    pub const fn is_task_finish_pending(self, channel: u8) -> bool {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_TASK_FINISH_IRQ_STA,
-            DmaChannel::Ch1 => Self::CH1_TASK_FINISH_IRQ_STA,
-            DmaChannel::Ch2 => Self::CH2_TASK_FINISH_IRQ_STA,
-            DmaChannel::Ch3 => Self::CH3_TASK_FINISH_IRQ_STA,
-            DmaChannel::Ch4 => Self::CH4_TASK_FINISH_IRQ_STA,
-            DmaChannel::Ch5 => Self::CH5_TASK_FINISH_IRQ_STA,
-            DmaChannel::Ch6 => Self::CH6_TASK_FINISH_IRQ_STA,
-            DmaChannel::Ch7 => Self::CH7_TASK_FINISH_IRQ_STA,
+            0x0 => Self::CH0_TASK_FINISH_IRQ_STA,
+            0x1 => Self::CH1_TASK_FINISH_IRQ_STA,
+            0x2 => Self::CH2_TASK_FINISH_IRQ_STA,
+            0x3 => Self::CH3_TASK_FINISH_IRQ_STA,
+            0x4 => Self::CH4_TASK_FINISH_IRQ_STA,
+            0x5 => Self::CH5_TASK_FINISH_IRQ_STA,
+            0x6 => Self::CH6_TASK_FINISH_IRQ_STA,
+            0x7 => Self::CH7_TASK_FINISH_IRQ_STA,
+            _ => unreachable!(),
         };
         (self.0 & mask) != 0
     }
     /// Clear channel task finish interrupt pending flag.
     #[inline]
-    pub const fn clear_task_finish_pending(self, channel: DmaChannel) -> Self {
+    pub const fn clear_task_finish_pending(self, channel: u8) -> Self {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_TASK_FINISH_IRQ_STA,
-            DmaChannel::Ch1 => Self::CH1_TASK_FINISH_IRQ_STA,
-            DmaChannel::Ch2 => Self::CH2_TASK_FINISH_IRQ_STA,
-            DmaChannel::Ch3 => Self::CH3_TASK_FINISH_IRQ_STA,
-            DmaChannel::Ch4 => Self::CH4_TASK_FINISH_IRQ_STA,
-            DmaChannel::Ch5 => Self::CH5_TASK_FINISH_IRQ_STA,
-            DmaChannel::Ch6 => Self::CH6_TASK_FINISH_IRQ_STA,
-            DmaChannel::Ch7 => Self::CH7_TASK_FINISH_IRQ_STA,
+            0x0 => Self::CH0_TASK_FINISH_IRQ_STA,
+            0x1 => Self::CH1_TASK_FINISH_IRQ_STA,
+            0x2 => Self::CH2_TASK_FINISH_IRQ_STA,
+            0x3 => Self::CH3_TASK_FINISH_IRQ_STA,
+            0x4 => Self::CH4_TASK_FINISH_IRQ_STA,
+            0x5 => Self::CH5_TASK_FINISH_IRQ_STA,
+            0x6 => Self::CH6_TASK_FINISH_IRQ_STA,
+            0x7 => Self::CH7_TASK_FINISH_IRQ_STA,
+            _ => unreachable!(),
         };
         Self(self.0 | mask)
     }
     /// Check if channel task half interrupt is pending.
     #[inline]
-    pub const fn is_task_half_pending(self, channel: DmaChannel) -> bool {
+    pub const fn is_task_half_pending(self, channel: u8) -> bool {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_TASK_HALF_IRQ_STA,
-            DmaChannel::Ch1 => Self::CH1_TASK_HALF_IRQ_STA,
-            DmaChannel::Ch2 => Self::CH2_TASK_HALF_IRQ_STA,
-            DmaChannel::Ch3 => Self::CH3_TASK_HALF_IRQ_STA,
-            DmaChannel::Ch4 => Self::CH4_TASK_HALF_IRQ_STA,
-            DmaChannel::Ch5 => Self::CH5_TASK_HALF_IRQ_STA,
-            DmaChannel::Ch6 => Self::CH6_TASK_HALF_IRQ_STA,
-            DmaChannel::Ch7 => Self::CH7_TASK_HALF_IRQ_STA,
+            0x0 => Self::CH0_TASK_HALF_IRQ_STA,
+            0x1 => Self::CH1_TASK_HALF_IRQ_STA,
+            0x2 => Self::CH2_TASK_HALF_IRQ_STA,
+            0x3 => Self::CH3_TASK_HALF_IRQ_STA,
+            0x4 => Self::CH4_TASK_HALF_IRQ_STA,
+            0x5 => Self::CH5_TASK_HALF_IRQ_STA,
+            0x6 => Self::CH6_TASK_HALF_IRQ_STA,
+            0x7 => Self::CH7_TASK_HALF_IRQ_STA,
+            _ => unreachable!(),
         };
         (self.0 & mask) != 0
     }
     /// Clear channel task half interrupt pending flag.
     #[inline]
-    pub const fn clear_task_half_pending(self, channel: DmaChannel) -> Self {
+    pub const fn clear_task_half_pending(self, channel: u8) -> Self {
         let mask = match channel {
-            DmaChannel::Ch0 => Self::CH0_TASK_HALF_IRQ_STA,
-            DmaChannel::Ch1 => Self::CH1_TASK_HALF_IRQ_STA,
-            DmaChannel::Ch2 => Self::CH2_TASK_HALF_IRQ_STA,
-            DmaChannel::Ch3 => Self::CH3_TASK_HALF_IRQ_STA,
-            DmaChannel::Ch4 => Self::CH4_TASK_HALF_IRQ_STA,
-            DmaChannel::Ch5 => Self::CH5_TASK_HALF_IRQ_STA,
-            DmaChannel::Ch6 => Self::CH6_TASK_HALF_IRQ_STA,
-            DmaChannel::Ch7 => Self::CH7_TASK_HALF_IRQ_STA,
+            0x0 => Self::CH0_TASK_HALF_IRQ_STA,
+            0x1 => Self::CH1_TASK_HALF_IRQ_STA,
+            0x2 => Self::CH2_TASK_HALF_IRQ_STA,
+            0x3 => Self::CH3_TASK_HALF_IRQ_STA,
+            0x4 => Self::CH4_TASK_HALF_IRQ_STA,
+            0x5 => Self::CH5_TASK_HALF_IRQ_STA,
+            0x6 => Self::CH6_TASK_HALF_IRQ_STA,
+            0x7 => Self::CH7_TASK_HALF_IRQ_STA,
+            _ => unreachable!(),
         };
         Self(self.0 | mask)
     }
@@ -509,17 +515,17 @@ impl Gate {
     /// Enable channel (`DMA_GATE_BYPASS`).
     #[doc(alias = "DMA_GATE_BYPASS")]
     #[inline]
-    pub const fn enable_ch(self, channel: DmaChannel) -> Self {
+    pub const fn enable_ch(self, channel: u8) -> Self {
         Self(self.0 | (Self::DMA_GATE_BYPASS << channel as u32))
     }
     /// Disable channel.
     #[inline]
-    pub const fn disable_ch(self, channel: DmaChannel) -> Self {
+    pub const fn disable_ch(self, channel: u8) -> Self {
         Self(self.0 & !(Self::DMA_GATE_BYPASS << channel as u32))
     }
     /// Check if channel is enabled.
     #[inline]
-    pub const fn is_ch_enabled(self, channel: DmaChannel) -> bool {
+    pub const fn is_ch_enabled(self, channel: u8) -> bool {
         (self.0 & (Self::DMA_GATE_BYPASS << channel as u32)) != 0
     }
 }
@@ -532,7 +538,7 @@ pub struct ChStatus(u32);
 impl ChStatus {
     /// Check if channel is busy.
     #[inline]
-    pub const fn is_busy(self, channel: DmaChannel) -> bool {
+    pub const fn is_busy(self, channel: u8) -> bool {
         (self.0 & (0x1 << (channel as u32))) != 0
     }
 }
@@ -575,6 +581,12 @@ impl ChPause {
     const MEM_BYTE_ENABLE: u32 = 0x1 << 5;
     const MEM_SET_ENABLE: u32 = 0x1 << 4;
     const DMA_CH_PAUSE: u32 = 0x1;
+
+    /// Create a zero-default `ChPause`.
+    #[inline]
+    pub const fn zeroed() -> Self {
+        Self(0)
+    }
 
     /// Enable memory byte mode (`MEM_BYTE_ENABLE`).
     #[doc(alias = "MEM_BYTE_ENABLE")]
@@ -646,248 +658,6 @@ pub enum BurstSize {
     Burst16,
 }
 
-/// DMA device.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
-pub enum DmaDev {
-    Sram,
-    Dram,
-    #[cfg(any(
-        feature = "d12x",
-        feature = "d13x",
-        feature = "g73x",
-        feature = "m6800"
-    ))]
-    Xip,
-    #[cfg(any(
-        feature = "d13x",
-        feature = "d21x",
-        feature = "g73x",
-        feature = "m6800"
-    ))]
-    PsadcQ1,
-    #[cfg(any(
-        feature = "d13x",
-        feature = "d21x",
-        feature = "g73x",
-        feature = "m6800"
-    ))]
-    PsadcQ2,
-    #[cfg(any(
-        feature = "d13x",
-        feature = "d21x",
-        feature = "g73x",
-        feature = "m6800"
-    ))]
-    Spi2,
-    #[cfg(any(
-        feature = "d13x",
-        feature = "d21x",
-        feature = "g73x",
-        feature = "m6800"
-    ))]
-    Spi3,
-    Spi0,
-    Spi1,
-    #[cfg(any(
-        feature = "d13x",
-        feature = "d21x",
-        feature = "g73x",
-        feature = "m6800"
-    ))]
-    I2s0,
-    #[cfg(any(
-        feature = "d13x",
-        feature = "d21x",
-        feature = "g73x",
-        feature = "m6800"
-    ))]
-    I2s1,
-    #[cfg(any(
-        feature = "d12x",
-        feature = "d13x",
-        feature = "g73x",
-        feature = "m6800"
-    ))]
-    AudioDmic,
-    #[cfg(feature = "d21x")]
-    AudioAdc,
-    Uart0,
-    Uart1,
-    Uart2,
-    Uart3,
-    #[cfg(any(
-        feature = "d13x",
-        feature = "d21x",
-        feature = "g73x",
-        feature = "m6800"
-    ))]
-    Uart4,
-    #[cfg(any(
-        feature = "d13x",
-        feature = "d21x",
-        feature = "g73x",
-        feature = "m6800"
-    ))]
-    Uart5,
-    #[cfg(any(
-        feature = "d13x",
-        feature = "d21x",
-        feature = "g73x",
-        feature = "m6800"
-    ))]
-    Uart6,
-    #[cfg(any(
-        feature = "d13x",
-        feature = "d21x",
-        feature = "g73x",
-        feature = "m6800"
-    ))]
-    Uart7,
-    #[cfg(any(
-        feature = "d12x",
-        feature = "d13x",
-        feature = "g73x",
-        feature = "m6800"
-    ))]
-    Xspi,
-    #[cfg(feature = "m6800")]
-    Sdfm0,
-    #[cfg(feature = "m6800")]
-    Sdfm1,
-    #[cfg(feature = "m6800")]
-    Sdfm2,
-    #[cfg(feature = "m6800")]
-    Sdfm3,
-}
-
-impl DmaDev {
-    /// Get the DMA device ID value.
-    #[inline]
-    pub const fn id(self) -> u8 {
-        match self {
-            Self::Sram => 0,
-            Self::Dram => {
-                #[cfg(feature = "d21x")]
-                {
-                    1
-                }
-                #[cfg(not(feature = "d21x"))]
-                {
-                    0
-                }
-            }
-            #[cfg(any(
-                feature = "d12x",
-                feature = "d13x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            Self::Xip => 0,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            Self::PsadcQ1 => 4,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            Self::PsadcQ2 => 5,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            Self::Spi2 => 8,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            Self::Spi3 => 9,
-            Self::Spi0 => 10,
-            Self::Spi1 => 11,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            Self::I2s0 => 12,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            Self::I2s1 => 13,
-            #[cfg(any(
-                feature = "d12x",
-                feature = "d13x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            Self::AudioDmic => 14,
-            #[cfg(feature = "d21x")]
-            Self::AudioAdc => 15,
-            Self::Uart0 => 16,
-            Self::Uart1 => 17,
-            Self::Uart2 => 18,
-            Self::Uart3 => 19,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            Self::Uart4 => 20,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            Self::Uart5 => 21,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            Self::Uart6 => 22,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            Self::Uart7 => 23,
-            #[cfg(any(
-                feature = "d12x",
-                feature = "d13x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            Self::Xspi => 24,
-            #[cfg(feature = "m6800")]
-            Self::Sdfm0 => 25,
-            #[cfg(feature = "m6800")]
-            Self::Sdfm1 => 26,
-            #[cfg(feature = "m6800")]
-            Self::Sdfm2 => 27,
-            #[cfg(feature = "m6800")]
-            Self::Sdfm3 => 28,
-        }
-    }
-}
-
 /// DMA channel configuration register.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -902,6 +672,12 @@ impl ChConfig {
     const SRC_ADDR_MODE: u32 = 0x1 << 8;
     const SRC_BURST: u32 = 0x3 << 6;
     const SRC_DEV: u32 = 0x3F;
+
+    /// Create a zero-default `ChConfig`.
+    #[inline]
+    pub const fn zeroed() -> Self {
+        Self(0)
+    }
 
     /// Set sink data width (`SNK_DATA_WIDTH`).
     #[doc(alias = "SNK_DATA_WIDTH")]
@@ -924,17 +700,17 @@ impl ChConfig {
     #[doc(alias = "SNK_ADDR_MODE")]
     #[inline]
     pub const fn enable_snk_addr_inc(self) -> Self {
-        Self((self.0 & !Self::SNK_ADDR_MODE) | (1 << 24))
+        Self(self.0 & !Self::SNK_ADDR_MODE)
     }
     /// Disable sink address increment mode.
     #[inline]
     pub const fn disable_snk_addr_inc(self) -> Self {
-        Self(self.0 & !Self::SNK_ADDR_MODE)
+        Self(self.0 | Self::SNK_ADDR_MODE)
     }
     /// Check if sink address increment mode is enabled.
     #[inline]
     pub const fn is_snk_addr_inc_enabled(self) -> bool {
-        (self.0 & Self::SNK_ADDR_MODE) != 0
+        (self.0 & Self::SNK_ADDR_MODE) == 0
     }
     /// Set sink burst size (`SNK_BURST`).
     #[doc(alias = "SNK_BURST")]
@@ -956,12 +732,12 @@ impl ChConfig {
     /// Set sink device (`SNK_DEV`).
     #[doc(alias = "SNK_DEV")]
     #[inline]
-    pub const fn set_snk_dev(self, dev: DmaDev) -> Self {
-        Self((self.0 & !Self::SNK_DEV) | ((dev.id() as u32) << 16))
+    pub const fn set_snk_dev(self, dev: u8) -> Self {
+        Self((self.0 & !Self::SNK_DEV) | ((dev as u32) << 16))
     }
-    /// Get sink device id.
+    /// Get sink device.
     #[inline]
-    pub const fn snk_dev_id(self) -> u8 {
+    pub const fn snk_dev(self) -> u8 {
         ((self.0 & Self::SNK_DEV) >> 16) as u8
     }
     /// Set source data width (`SRC_DATA_WIDTH`).
@@ -984,17 +760,17 @@ impl ChConfig {
     /// Enable source address increment mode (`SRC_ADDR_MODE`).
     #[inline]
     pub const fn enable_src_addr_inc(self) -> Self {
-        Self((self.0 & !Self::SRC_ADDR_MODE) | (1 << 8))
+        Self(self.0 & !Self::SRC_ADDR_MODE)
     }
     /// Disable source address increment mode.
     #[inline]
     pub const fn disable_src_addr_inc(self) -> Self {
-        Self(self.0 & !Self::SRC_ADDR_MODE)
+        Self(self.0 | Self::SRC_ADDR_MODE)
     }
     /// Check if source address increment mode is enabled.
     #[inline]
     pub const fn is_src_addr_inc_enabled(self) -> bool {
-        (self.0 & Self::SRC_ADDR_MODE) != 0
+        (self.0 & Self::SRC_ADDR_MODE) == 0
     }
     /// Set source burst size (`SRC_BURST`).
     #[doc(alias = "SRC_BURST")]
@@ -1016,12 +792,12 @@ impl ChConfig {
     /// Set source device (`SRC_DEV`).
     #[doc(alias = "SRC_DEV")]
     #[inline]
-    pub const fn set_src_dev(self, dev: DmaDev) -> Self {
-        Self((self.0 & !Self::SRC_DEV) | (dev.id() as u32))
+    pub const fn set_src_dev(self, dev: u8) -> Self {
+        Self((self.0 & !Self::SRC_DEV) | (dev as u32))
     }
-    /// Get source device id.
+    /// Get source device.
     #[inline]
-    pub const fn src_dev_id(self) -> u8 {
+    pub const fn src_dev(self) -> u8 {
         (self.0 & Self::SRC_DEV) as u8
     }
 }
@@ -1030,7 +806,7 @@ impl ChConfig {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum HandshakeMode {
-    WaitForHandshake,
+    Wait,
     Handshake,
 }
 
@@ -1042,8 +818,15 @@ pub struct ChMode(u32);
 impl ChMode {
     const SNK_HANDSHAKE_ENABLE: u32 = 0x1 << 6;
     const SRC_HANDSHAKE_ENABLE: u32 = 0x1 << 5;
+    const HANDSHAKE_ENABLE: u32 = 0x1 << 4;
     const DMA_SNK_MODE: u32 = 0x1 << 3;
     const DMA_SRC_MODE: u32 = 0x1 << 2;
+
+    /// Create a zero-default `ChMode`.
+    #[inline]
+    pub const fn zeroed() -> Self {
+        Self(0)
+    }
 
     /// Enable sink handshake (`SNK_HANDSHAKE_ENABLE`).
     #[doc(alias = "SNK_HANDSHAKE_ENABLE")]
@@ -1077,6 +860,22 @@ impl ChMode {
     pub const fn is_src_handshake_enabled(self) -> bool {
         (self.0 & Self::SRC_HANDSHAKE_ENABLE) != 0
     }
+    /// Enable handshake mode (`HANDSHAKE_ENABLE`).
+    #[doc(alias = "HANDSHAKE_ENABLE")]
+    #[inline]
+    pub const fn enable_handshake(self) -> Self {
+        Self(self.0 | Self::HANDSHAKE_ENABLE)
+    }
+    /// Disable handshake mode.
+    #[inline]
+    pub const fn disable_handshake(self) -> Self {
+        Self(self.0 & !Self::HANDSHAKE_ENABLE)
+    }
+    /// Check if handshake mode is enabled.
+    #[inline]
+    pub const fn is_handshake_enabled(self) -> bool {
+        (self.0 & Self::HANDSHAKE_ENABLE) != 0
+    }
     /// Set sink mode (`DMA_SNK_MODE`).
     #[doc(alias = "DMA_SNK_MODE")]
     #[inline]
@@ -1087,7 +886,7 @@ impl ChMode {
     #[inline]
     pub const fn snk_mode(self) -> HandshakeMode {
         match (self.0 & Self::DMA_SNK_MODE) >> 3 {
-            0 => HandshakeMode::WaitForHandshake,
+            0 => HandshakeMode::Wait,
             1 => HandshakeMode::Handshake,
             _ => unreachable!(),
         }
@@ -1102,7 +901,7 @@ impl ChMode {
     #[inline]
     pub const fn src_mode(self) -> HandshakeMode {
         match (self.0 & Self::DMA_SRC_MODE) >> 2 {
-            0 => HandshakeMode::WaitForHandshake,
+            0 => HandshakeMode::Wait,
             1 => HandshakeMode::Handshake,
             _ => unreachable!(),
         }
@@ -1112,8 +911,8 @@ impl ChMode {
 #[cfg(test)]
 mod tests {
     use super::{
-        BurstSize, ChConfig, ChEnable, ChMode, ChPause, ChStatus, DataWidth, DmaCh, DmaChannel,
-        DmaDev, Gate, HandshakeMode, IntEnable, IntStatus, MemBurst, MemCfg, RegisterBlock,
+        BurstSize, ChConfig, ChEnable, ChMode, ChPause, ChStatus, DataWidth, DmaCh, Gate,
+        HandshakeMode, IntEnable, IntStatus, MemBurst, MemCfg, RegisterBlock,
     };
     use core::mem::{offset_of, size_of};
 
@@ -1147,62 +946,14 @@ mod tests {
     fn struct_int_enable_functions() {
         for i in 0..8 {
             let (ch, err_en, all_finish_en, task_finish_en, task_half) = match i {
-                0 => (
-                    DmaChannel::Ch0,
-                    0x0000_0008,
-                    0x0000_0004,
-                    0x0000_0002,
-                    0x0000_0001,
-                ),
-                1 => (
-                    DmaChannel::Ch1,
-                    0x0000_0080,
-                    0x0000_0040,
-                    0x0000_0020,
-                    0x0000_0010,
-                ),
-                2 => (
-                    DmaChannel::Ch2,
-                    0x0000_0800,
-                    0x0000_0400,
-                    0x0000_0200,
-                    0x0000_0100,
-                ),
-                3 => (
-                    DmaChannel::Ch3,
-                    0x0000_8000,
-                    0x0000_4000,
-                    0x0000_2000,
-                    0x0000_1000,
-                ),
-                4 => (
-                    DmaChannel::Ch4,
-                    0x0008_0000,
-                    0x0004_0000,
-                    0x0002_0000,
-                    0x0001_0000,
-                ),
-                5 => (
-                    DmaChannel::Ch5,
-                    0x0080_0000,
-                    0x0040_0000,
-                    0x0020_0000,
-                    0x0010_0000,
-                ),
-                6 => (
-                    DmaChannel::Ch6,
-                    0x0800_0000,
-                    0x0400_0000,
-                    0x0200_0000,
-                    0x0100_0000,
-                ),
-                7 => (
-                    DmaChannel::Ch7,
-                    0x8000_0000,
-                    0x4000_0000,
-                    0x2000_0000,
-                    0x1000_0000,
-                ),
+                0 => (0x0, 0x0000_0008, 0x0000_0004, 0x0000_0002, 0x0000_0001),
+                1 => (0x1, 0x0000_0080, 0x0000_0040, 0x0000_0020, 0x0000_0010),
+                2 => (0x2, 0x0000_0800, 0x0000_0400, 0x0000_0200, 0x0000_0100),
+                3 => (0x3, 0x0000_8000, 0x0000_4000, 0x0000_2000, 0x0000_1000),
+                4 => (0x4, 0x0008_0000, 0x0004_0000, 0x0002_0000, 0x0001_0000),
+                5 => (0x5, 0x0080_0000, 0x0040_0000, 0x0020_0000, 0x0010_0000),
+                6 => (0x6, 0x0800_0000, 0x0400_0000, 0x0200_0000, 0x0100_0000),
+                7 => (0x7, 0x8000_0000, 0x4000_0000, 0x2000_0000, 0x1000_0000),
                 _ => unreachable!(),
             };
             let mut val = IntEnable(0).enable_channel_addr_req_err(ch);
@@ -1239,62 +990,14 @@ mod tests {
     fn struct_int_status_functions() {
         for i in 0..8 {
             let (ch, err_st, all_finish_st, task_finish_st, task_half_st) = match i {
-                0 => (
-                    DmaChannel::Ch0,
-                    0x0000_0008,
-                    0x0000_0004,
-                    0x0000_0002,
-                    0x0000_0001,
-                ),
-                1 => (
-                    DmaChannel::Ch1,
-                    0x0000_0080,
-                    0x0000_0040,
-                    0x0000_0020,
-                    0x0000_0010,
-                ),
-                2 => (
-                    DmaChannel::Ch2,
-                    0x0000_0800,
-                    0x0000_0400,
-                    0x0000_0200,
-                    0x0000_0100,
-                ),
-                3 => (
-                    DmaChannel::Ch3,
-                    0x0000_8000,
-                    0x0000_4000,
-                    0x0000_2000,
-                    0x0000_1000,
-                ),
-                4 => (
-                    DmaChannel::Ch4,
-                    0x0008_0000,
-                    0x0004_0000,
-                    0x0002_0000,
-                    0x0001_0000,
-                ),
-                5 => (
-                    DmaChannel::Ch5,
-                    0x0080_0000,
-                    0x0040_0000,
-                    0x0020_0000,
-                    0x0010_0000,
-                ),
-                6 => (
-                    DmaChannel::Ch6,
-                    0x0800_0000,
-                    0x0400_0000,
-                    0x0200_0000,
-                    0x0100_0000,
-                ),
-                7 => (
-                    DmaChannel::Ch7,
-                    0x8000_0000,
-                    0x4000_0000,
-                    0x2000_0000,
-                    0x1000_0000,
-                ),
+                0 => (0x0, 0x0000_0008, 0x0000_0004, 0x0000_0002, 0x0000_0001),
+                1 => (0x1, 0x0000_0080, 0x0000_0040, 0x0000_0020, 0x0000_0010),
+                2 => (0x2, 0x0000_0800, 0x0000_0400, 0x0000_0200, 0x0000_0100),
+                3 => (0x3, 0x0000_8000, 0x0000_4000, 0x0000_2000, 0x0000_1000),
+                4 => (0x4, 0x0008_0000, 0x0004_0000, 0x0002_0000, 0x0001_0000),
+                5 => (0x5, 0x0080_0000, 0x0040_0000, 0x0020_0000, 0x0010_0000),
+                6 => (0x6, 0x0800_0000, 0x0400_0000, 0x0200_0000, 0x0100_0000),
+                7 => (0x7, 0x8000_0000, 0x4000_0000, 0x2000_0000, 0x1000_0000),
                 _ => unreachable!(),
             };
             let mut val = IntStatus(0).clear_addr_req_err_pending(ch);
@@ -1330,14 +1033,14 @@ mod tests {
     fn struct_gate_functions() {
         for i in 0..8 {
             let (ch, en_st) = match i {
-                0 => (DmaChannel::Ch0, 0x0000_0001),
-                1 => (DmaChannel::Ch1, 0x0000_0002),
-                2 => (DmaChannel::Ch2, 0x0000_0004),
-                3 => (DmaChannel::Ch3, 0x0000_0008),
-                4 => (DmaChannel::Ch4, 0x0000_0010),
-                5 => (DmaChannel::Ch5, 0x0000_0020),
-                6 => (DmaChannel::Ch6, 0x0000_0040),
-                7 => (DmaChannel::Ch7, 0x0000_0080),
+                0 => (0x0, 0x0000_0001),
+                1 => (0x1, 0x0000_0002),
+                2 => (0x2, 0x0000_0004),
+                3 => (0x3, 0x0000_0008),
+                4 => (0x4, 0x0000_0010),
+                5 => (0x5, 0x0000_0020),
+                6 => (0x6, 0x0000_0040),
+                7 => (0x7, 0x0000_0080),
                 _ => unreachable!(),
             };
             let mut val = Gate(0).enable_ch(ch);
@@ -1353,14 +1056,14 @@ mod tests {
     fn struct_ch_status_functions() {
         for i in 0..8 {
             let (ch, busy_st) = match i {
-                0 => (DmaChannel::Ch0, 0x0000_0001),
-                1 => (DmaChannel::Ch1, 0x0000_0002),
-                2 => (DmaChannel::Ch2, 0x0000_0004),
-                3 => (DmaChannel::Ch3, 0x0000_0008),
-                4 => (DmaChannel::Ch4, 0x0000_0010),
-                5 => (DmaChannel::Ch5, 0x0000_0020),
-                6 => (DmaChannel::Ch6, 0x0000_0040),
-                7 => (DmaChannel::Ch7, 0x0000_0080),
+                0 => (0x0, 0x0000_0001),
+                1 => (0x1, 0x0000_0002),
+                2 => (0x2, 0x0000_0004),
+                3 => (0x3, 0x0000_0008),
+                4 => (0x4, 0x0000_0010),
+                5 => (0x5, 0x0000_0020),
+                6 => (0x6, 0x0000_0040),
+                7 => (0x7, 0x0000_0080),
                 _ => unreachable!(),
             };
             let val = ChStatus(busy_st);
@@ -1380,7 +1083,7 @@ mod tests {
 
     #[test]
     fn struct_ch_pause_functions() {
-        let mut val = ChPause(0).enable_mem_byte();
+        let mut val = ChPause::zeroed().enable_mem_byte();
         assert!(val.is_mem_byte_enabled());
         assert_eq!(val.0, 0x0000_0020);
         val = val.disable_mem_byte();
@@ -1414,16 +1117,16 @@ mod tests {
                 _ => unreachable!(),
             };
 
-            let val = ChConfig(0).set_snk_data_width(data_width);
+            let val = ChConfig::zeroed().set_snk_data_width(data_width);
             assert_eq!(val.snk_data_width(), data_width);
             assert_eq!(val.0, reg_val);
         }
 
-        let mut val = ChConfig(0).enable_snk_addr_inc();
-        assert!(val.is_snk_addr_inc_enabled());
-        assert_eq!(val.0, 0x0100_0000);
-        val = val.disable_snk_addr_inc();
+        let mut val = ChConfig(0).disable_snk_addr_inc();
         assert!(!val.is_snk_addr_inc_enabled());
+        assert_eq!(val.0, 0x0100_0000);
+        val = val.enable_snk_addr_inc();
+        assert!(val.is_snk_addr_inc_enabled());
         assert_eq!(val.0, 0x0000_0000);
 
         for i in 0..4 {
@@ -1439,123 +1142,9 @@ mod tests {
             assert_eq!(val.0, reg_val);
         }
 
-        let all_devices = [
-            DmaDev::Sram,
-            DmaDev::Dram,
-            #[cfg(any(
-                feature = "d12x",
-                feature = "d13x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            DmaDev::Xip,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            DmaDev::PsadcQ1,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            DmaDev::PsadcQ2,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            DmaDev::Spi2,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            DmaDev::Spi3,
-            DmaDev::Spi0,
-            DmaDev::Spi1,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            DmaDev::I2s0,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            DmaDev::I2s1,
-            #[cfg(any(
-                feature = "d12x",
-                feature = "d13x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            DmaDev::AudioDmic,
-            #[cfg(feature = "d21x")]
-            DmaDev::AudioAdc,
-            DmaDev::Uart0,
-            DmaDev::Uart1,
-            DmaDev::Uart2,
-            DmaDev::Uart3,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            DmaDev::Uart4,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            DmaDev::Uart5,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            DmaDev::Uart6,
-            #[cfg(any(
-                feature = "d13x",
-                feature = "d21x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            DmaDev::Uart7,
-            #[cfg(any(
-                feature = "d12x",
-                feature = "d13x",
-                feature = "g73x",
-                feature = "m6800"
-            ))]
-            DmaDev::Xspi,
-            #[cfg(feature = "m6800")]
-            DmaDev::Sdfm0,
-            #[cfg(feature = "m6800")]
-            DmaDev::Sdfm1,
-            #[cfg(feature = "m6800")]
-            DmaDev::Sdfm2,
-            #[cfg(feature = "m6800")]
-            DmaDev::Sdfm3,
-        ];
-
-        for dev in all_devices.iter() {
-            let val = ChConfig(0).set_snk_dev(*dev);
-            assert_eq!(val.snk_dev_id(), dev.id());
-            assert_eq!(val.0, (dev.id() as u32) << 16);
-        }
+        let val = ChConfig(0).set_snk_dev(0x3F);
+        assert_eq!(val.snk_dev(), 0x3F);
+        assert_eq!(val.0, 0x003F_0000);
 
         for i in 0..4 {
             let (data_width, reg_val) = match i {
@@ -1571,11 +1160,11 @@ mod tests {
             assert_eq!(val.0, reg_val);
         }
 
-        let mut val = ChConfig(0).enable_src_addr_inc();
-        assert!(val.is_src_addr_inc_enabled());
-        assert_eq!(val.0, 0x0000_0100);
-        val = val.disable_src_addr_inc();
+        let mut val = ChConfig(0).disable_src_addr_inc();
         assert!(!val.is_src_addr_inc_enabled());
+        assert_eq!(val.0, 0x0000_0100);
+        val = val.enable_src_addr_inc();
+        assert!(val.is_src_addr_inc_enabled());
         assert_eq!(val.0, 0x0000_0000);
 
         for i in 0..4 {
@@ -1591,11 +1180,9 @@ mod tests {
             assert_eq!(val.0, reg_val);
         }
 
-        for dev in all_devices.iter() {
-            let val = ChConfig(0).set_src_dev(*dev);
-            assert_eq!(val.src_dev_id(), dev.id());
-            assert_eq!(val.0, dev.id() as u32);
-        }
+        let val = ChConfig(0).set_src_dev(0x3F);
+        assert_eq!(val.src_dev(), 0x3F);
+        assert_eq!(val.0, 0x0000_003F);
     }
 
     #[test]
@@ -1614,9 +1201,16 @@ mod tests {
         assert!(!val.is_src_handshake_enabled());
         assert_eq!(val.0, 0x0000_0000);
 
+        val = val.enable_handshake();
+        assert!(val.is_handshake_enabled());
+        assert_eq!(val.0, 0x0000_0010);
+        val = val.disable_handshake();
+        assert!(!val.is_handshake_enabled());
+        assert_eq!(val.0, 0x0000_0000);
+
         for i in 0..2 {
             let (mode, reg_val) = match i {
-                0 => (HandshakeMode::WaitForHandshake, 0x0000_0000),
+                0 => (HandshakeMode::Wait, 0x0000_0000),
                 1 => (HandshakeMode::Handshake, 0x0000_0008),
                 _ => unreachable!(),
             };
@@ -1627,11 +1221,11 @@ mod tests {
 
         for i in 0..2 {
             let (mode, reg_val) = match i {
-                0 => (HandshakeMode::WaitForHandshake, 0x0000_0000),
+                0 => (HandshakeMode::Wait, 0x0000_0000),
                 1 => (HandshakeMode::Handshake, 0x0000_0004),
                 _ => unreachable!(),
             };
-            let val = ChMode(0).set_src_mode(mode);
+            let val = ChMode::zeroed().set_src_mode(mode);
             assert_eq!(val.src_mode(), mode);
             assert_eq!(val.0, reg_val);
         }
