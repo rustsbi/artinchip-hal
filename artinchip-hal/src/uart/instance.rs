@@ -5,7 +5,7 @@ use super::config::UartConfig;
 use super::pad::{Receive, Transmit, UartPad};
 use super::register::RegisterBlock;
 use super::uart_ext::UartExt;
-use crate::cmu;
+use crate::cmu::Cmu;
 use core::marker::PhantomData;
 
 /// UART with statically known instance number.
@@ -36,12 +36,12 @@ impl<const I: u8> UartExt<'static, I> for Uart<I> {
         tx: TX,
         rx: RX,
         config: UartConfig,
-        clk: &cmu::Cmu,
+        cmu: &mut Cmu,
     ) -> BlockingSerial<'static, I, TX, RX>
     where
         TX: UartPad<I> + Transmit<I>,
         RX: UartPad<I> + Receive<I>,
     {
-        BlockingSerial::new(self.register_block(), tx, rx, config, clk)
+        BlockingSerial::new(self.register_block(), tx, rx, config, cmu)
     }
 }

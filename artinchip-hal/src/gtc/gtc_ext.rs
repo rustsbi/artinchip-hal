@@ -6,5 +6,5 @@ use crate::cmu::Cmu;
 
 pub trait GtcExt<'a> {
     /// Creates a new TimerDelay instance.
-    fn new_timer_delay(self, freq: CntFreq, cmu: &Cmu) -> TimerDelay<'a>;
+    fn new_timer_delay(self, freq: CntFreq, cmu: &mut Cmu) -> TimerDelay<'a>;
 }

@@ -5,5 +5,5 @@ use crate::cmu::Cmu;
 
 pub trait DmaExt {
     /// Split the DMA into independent channels.
-    fn split(self, cmu: &Cmu) -> DmaChannels;
+    fn split(self, cmu: &mut Cmu) -> DmaChannels;
 }

@@ -18,16 +18,18 @@ static mut MEM_DST: MemBuf = MemBuf([0xDEAD_BEEFu32; 2000]);
 
 #[pbp_entry]
 fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
-    let p = Peripherals::take();
+    let mut p = Peripherals::take();
 
     let tx = p.gpioa.pa0.into_uart0_tx();
     let rx = p.gpioa.pa1.into_uart0_rx();
     let mut pa5 = p.gpioa.pa5.into_pull_up_output();
-    let mut delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &p.cmu);
+    let mut delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &mut p.cmu);
 
-    let mut uart0 = p.uart0.new_blocking(tx, rx, UartConfig::default(), &p.cmu);
+    let mut uart0 = p
+        .uart0
+        .new_blocking(tx, rx, UartConfig::default(), &mut p.cmu);
 
-    let dma_channels = p.dma.split(&p.cmu);
+    let dma_channels = p.dma.split(&mut p.cmu);
 
     let mut dma_ch0 = dma_channels.ch0;
 

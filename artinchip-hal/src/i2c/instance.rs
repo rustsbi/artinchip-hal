@@ -34,7 +34,7 @@ impl<const I: u8> I2cExt<'static, I> for I2c<I> {
         self,
         pad: PAD,
         config: I2cConfig,
-        cmu: &Cmu,
+        cmu: &mut Cmu,
     ) -> BlockingI2c<'static, I, PAD>
     where
         PAD: I2cPads<I>,

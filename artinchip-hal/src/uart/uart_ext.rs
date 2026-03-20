@@ -13,7 +13,7 @@ pub trait UartExt<'a, const I: u8> {
         tx: TX,
         rx: RX,
         config: UartConfig,
-        cmu: &Cmu,
+        cmu: &mut Cmu,
     ) -> BlockingSerial<'a, I, TX, RX>
     where
         TX: UartPad<I> + Transmit<I>,

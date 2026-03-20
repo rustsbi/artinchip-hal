@@ -28,7 +28,7 @@ impl Wdog {
 }
 
 impl WdogExt<'static> for Wdog {
-    fn new_driver(self, cmu: &Cmu) -> WdogDriver<'static> {
+    fn new_driver(self, cmu: &mut Cmu) -> WdogDriver<'static> {
         WdogDriver::new(self.register_block(), cmu)
     }
 }

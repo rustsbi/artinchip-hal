@@ -12,7 +12,7 @@ pub struct RealTime<'a> {
 impl<'a> RealTime<'a> {
     const WRITE_EN_KEY: u8 = 0xAC;
     /// Create a new RealTime instance.
-    pub fn new(reg: &'a RegisterBlock, cmu: &Cmu) -> Self {
+    pub fn new(reg: &'a RegisterBlock, cmu: &mut Cmu) -> Self {
         let clk = &cmu.register_block().clock_rtc;
         unsafe {
             // Initialize module clock.
@@ -52,7 +52,7 @@ impl<'a> RealTime<'a> {
     }
 
     /// Set time.
-    pub fn set_time(&self, time: u32) {
+    pub fn set_time(&mut self, time: u32) {
         unsafe {
             // Enable write.
             self.reg
@@ -84,7 +84,7 @@ impl<'a> RealTime<'a> {
     }
 
     /// Set alarm.
-    pub fn set_alarm(&self, alarm: u32) {
+    pub fn set_alarm(&mut self, alarm: u32) {
         unsafe {
             // Enable write.
             self.reg

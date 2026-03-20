@@ -40,7 +40,7 @@ where
     const FIFO_DEPTH: u8 = 64;
 
     /// Create a new blocking QSPI interface.
-    pub fn new(reg: &'a RegisterBlock, pad: PAD, config: QspiConfig, cmu: &Cmu) -> Self {
+    pub fn new(reg: &'a RegisterBlock, pad: PAD, config: QspiConfig, cmu: &mut Cmu) -> Self {
         if config.mode == MODE_1 || config.mode == MODE_3 {
             panic!("QSPI only supports SPI modes 0 and 2");
         }
@@ -218,7 +218,7 @@ where
     }
 
     /// Reset the TX and RX FIFOs.
-    fn reset_fifos(&self) {
+    fn reset_fifos(&mut self) {
         unsafe {
             self.reg
                 .fifo_control
@@ -228,7 +228,7 @@ where
     }
 
     /// Start a new transfer.
-    fn start_transfer(&self, total: usize, tx: usize) {
+    fn start_transfer(&mut self, total: usize, tx: usize) {
         unsafe {
             self.reg
                 .total_bytes_cnt
@@ -245,14 +245,14 @@ where
     }
 
     /// Wait for the transfer to complete.
-    fn wait_transfer_done(&self) {
+    fn wait_transfer_done(&mut self) {
         while self.reg.trans_config.read().start() {
             core::hint::spin_loop();
         }
     }
 
     /// Write bytes to the TX FIFO.
-    fn write_bytes(&self, buf: &[u8]) {
+    fn write_bytes(&mut self, buf: &[u8]) {
         let mut idx = 0usize;
 
         while idx < buf.len() {
