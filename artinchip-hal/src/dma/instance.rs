@@ -28,7 +28,7 @@ impl Dma {
 }
 
 impl DmaExt for Dma {
-    fn split(self, cmu: &Cmu) -> DmaChannels {
+    fn split(self, cmu: &mut Cmu) -> DmaChannels {
         DmaChannels {
             ch0: DmaChannel::<0>::__new(self.register_block(), cmu),
             ch1: DmaChannel::<1>::__new(self.register_block(), cmu),

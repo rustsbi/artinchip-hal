@@ -35,7 +35,7 @@ impl<const I: u8> QspiExt<'static, I> for Qspi<I> {
         self,
         pad: PAD,
         config: QspiConfig,
-        cmu: &Cmu,
+        cmu: &mut Cmu,
     ) -> BlockingQspi<'static, I, PAD>
     where
         PAD: QspiPads<I>,

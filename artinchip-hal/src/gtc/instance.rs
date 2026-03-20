@@ -28,7 +28,7 @@ impl Gtc {
 }
 
 impl GtcExt<'static> for Gtc {
-    fn new_timer_delay(self, freq: CntFreq, cmu: &Cmu) -> TimerDelay<'static> {
+    fn new_timer_delay(self, freq: CntFreq, cmu: &mut Cmu) -> TimerDelay<'static> {
         TimerDelay::new(self.register_block(), freq, cmu)
     }
 }

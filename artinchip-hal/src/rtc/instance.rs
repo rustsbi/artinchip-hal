@@ -28,7 +28,7 @@ impl Rtc {
 }
 
 impl RtcExt<'static> for Rtc {
-    fn new_real_time(self, cmu: &Cmu) -> RealTime<'static> {
+    fn new_real_time(self, cmu: &mut Cmu) -> RealTime<'static> {
         RealTime::new(self.register_block(), cmu)
     }
 }

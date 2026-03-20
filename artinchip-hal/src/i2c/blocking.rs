@@ -25,7 +25,7 @@ where
     const I2C_DEFAULT_CLOCK: u32 = 24_000_000;
 
     /// Create a new blocking serial.
-    pub fn new(reg: &'a RegisterBlock, pad: PAD, config: I2cConfig, cmu: &Cmu) -> Self {
+    pub fn new(reg: &'a RegisterBlock, pad: PAD, config: I2cConfig, cmu: &mut Cmu) -> Self {
         // Reference: https://aicdoc.artinchip.com/topics/ic/i2c/i2c-programming-guide-d13x.html
         let clk = cmu.register_block();
         let i2c_clk = match I {
@@ -90,7 +90,7 @@ where
     }
 
     /// Set address.
-    pub fn set_address(&self, address: u16) {
+    pub fn set_address(&mut self, address: u16) {
         // Disable I2C.
         unsafe {
             self.reg.enable.modify(|v| v.disable_i2c());

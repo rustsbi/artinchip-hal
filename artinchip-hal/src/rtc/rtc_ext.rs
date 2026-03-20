@@ -5,5 +5,5 @@ use crate::cmu::Cmu;
 
 pub trait RtcExt<'a> {
     /// Creates a new RealTime instance.
-    fn new_real_time(self, cmu: &Cmu) -> RealTime<'a>;
+    fn new_real_time(self, cmu: &mut Cmu) -> RealTime<'a>;
 }

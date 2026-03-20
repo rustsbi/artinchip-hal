@@ -23,7 +23,7 @@ pub struct DmaChannel<'a, const I: u8> {
 
 impl<'a, const I: u8> DmaChannel<'a, I> {
     /// Create a new DMA channel.
-    pub fn __new(reg: &'a RegisterBlock, cmu: &Cmu) -> Self {
+    pub fn __new(reg: &'a RegisterBlock, cmu: &mut Cmu) -> Self {
         let clk = &cmu.register_block().clock_dma;
         if !clk.read().is_bus_clk_enabled() {
             unsafe {
@@ -263,7 +263,7 @@ impl<'a, const I: u8> DmaChannel<'a, I> {
     }
 
     /// Clear all interrupt pending flags for this channel.
-    pub fn clear_all_pending(&self) {
+    pub fn clear_all_pending(&mut self) {
         unsafe {
             self.reg.int_status.modify(|v| {
                 v.clear_addr_req_err_pending(I)

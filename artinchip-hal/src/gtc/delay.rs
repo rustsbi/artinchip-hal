@@ -11,7 +11,7 @@ pub struct TimerDelay<'a> {
 
 impl<'a> TimerDelay<'a> {
     /// Create a new TimerDelay instance.
-    pub fn new(reg: &'a RegisterBlock, freq: CntFreq, cmu: &Cmu) -> Self {
+    pub fn new(reg: &'a RegisterBlock, freq: CntFreq, cmu: &mut Cmu) -> Self {
         let clk = &cmu.register_block().clock_gtc;
         unsafe {
             // Initialize module clock.

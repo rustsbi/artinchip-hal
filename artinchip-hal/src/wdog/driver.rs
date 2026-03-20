@@ -19,7 +19,7 @@ impl<'a> WdogDriver<'a> {
     const FIXED_CLOCK: u32 = 32_000;
 
     /// Create a new WDOG driver.
-    pub fn new(reg: &'a RegisterBlock, cmu: &Cmu) -> Self {
+    pub fn new(reg: &'a RegisterBlock, cmu: &mut Cmu) -> Self {
         let clk = &cmu.register_block().clock_wdog;
         unsafe {
             // Initialize module clock.

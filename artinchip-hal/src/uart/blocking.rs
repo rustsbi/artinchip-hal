@@ -24,7 +24,7 @@ where
     RX: UartPad<I> + Receive<I>,
 {
     /// Create a new blocking serial.
-    pub fn new(reg: &'a RegisterBlock, tx: TX, rx: RX, config: UartConfig, cmu: &Cmu) -> Self {
+    pub fn new(reg: &'a RegisterBlock, tx: TX, rx: RX, config: UartConfig, cmu: &mut Cmu) -> Self {
         // Enable clocks for the UART instance
         // TODO: flexible clock frequency handling
         let fix_mod_clk_rate = 48_000_000;
@@ -132,7 +132,7 @@ where
     }
 
     /// Free the blocking serial and return UART instance, TX and RX pads.
-    pub fn free(self, cmu: &Cmu) -> (Uart<I>, TX, RX) {
+    pub fn free(self, cmu: &mut Cmu) -> (Uart<I>, TX, RX) {
         unsafe {
             let clk = cmu.register_block();
             let uart_clk = match I {
