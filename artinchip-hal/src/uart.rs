@@ -4,7 +4,6 @@ mod blocking;
 mod config;
 mod instance;
 mod pad;
-mod pin_mux;
 mod register;
 mod uart_ext;
 

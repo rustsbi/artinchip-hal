@@ -3,8 +3,9 @@
 use super::{
     GpioPad,
     mode::{FromRegisters, WithinGpioGroup, set_mode},
-    register::{GpioGroup, PinConfig, PinDriveStrength, PinPull, RegisterBlock},
 };
+
+use artinchip_hal::gpio::*;
 
 /// Function mode GPIO pad.
 pub struct Function<'a, const G: char, const N: u8, const F: u8> {

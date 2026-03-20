@@ -3,6 +3,7 @@
 
 use artinchip_hal::gtc::CntFreq;
 use artinchip_hal::prelude::*;
+use artinchip_rt::prelude::*;
 use artinchip_rt::{Peripherals, pbp_entry};
 use panic_halt as _;
 

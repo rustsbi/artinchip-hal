@@ -5,6 +5,7 @@ use artinchip_hal::gtc::CntFreq;
 use artinchip_hal::i2c::*;
 use artinchip_hal::prelude::*;
 use artinchip_hal::uart::*;
+use artinchip_rt::prelude::*;
 use artinchip_rt::{Peripherals, pbp_entry};
 use embedded_io::Write;
 use panic_halt as _;
@@ -12,10 +13,10 @@ use panic_halt as _;
 #[pbp_entry]
 fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
     let p = Peripherals::take();
-    let tx = p.gpioa.pa0.into_function::<5>();
-    let rx = p.gpioa.pa1.into_function::<5>();
-    let scl = p.gpioa.pa8.into_function::<4>();
-    let sda = p.gpioa.pa9.into_function::<4>();
+    let tx = p.gpioa.pa0.into_uart0_tx();
+    let rx = p.gpioa.pa1.into_uart0_rx();
+    let scl = p.gpioa.pa8.into_i2c2_scl();
+    let sda = p.gpioa.pa9.into_i2c2_sda();
 
     let mut button = p.gpioa.pa5.into_pull_up_input();
 

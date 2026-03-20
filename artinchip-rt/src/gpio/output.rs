@@ -3,11 +3,9 @@
 use super::{
     GpioPad,
     mode::{FromRegisters, WithinGpioGroup, set_mode},
-    register::{
-        GpioGroup, OutputClear, OutputSet, OutputToggle, PinConfig, PinDriveStrength, PinPull,
-        RegisterBlock,
-    },
 };
+
+use artinchip_hal::gpio::*;
 
 /// Output mode GPIO pad.
 pub struct Output<'a, const G: char, const N: u8> {

@@ -5,6 +5,7 @@ use artinchip_hal::dma::*;
 use artinchip_hal::gtc::CntFreq;
 use artinchip_hal::prelude::*;
 use artinchip_hal::uart::*;
+use artinchip_rt::prelude::*;
 use artinchip_rt::{Peripherals, core::cache::*, pbp_entry};
 use embedded_io::Write;
 use panic_halt as _;
@@ -19,8 +20,8 @@ static mut MEM_DST: MemBuf = MemBuf([0xDEAD_BEEFu32; 2000]);
 fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
     let p = Peripherals::take();
 
-    let tx = p.gpioa.pa0.into_function::<5>();
-    let rx = p.gpioa.pa1.into_function::<5>();
+    let tx = p.gpioa.pa0.into_uart0_tx();
+    let rx = p.gpioa.pa1.into_uart0_rx();
     let mut pa5 = p.gpioa.pa5.into_pull_up_output();
     let mut delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &p.cmu);
 
