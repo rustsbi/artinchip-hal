@@ -59,6 +59,8 @@ pub struct Peripherals {
     pub uart6: Uart<6>,
     /// Universal Asynchronous Receiver-Transmitter 7.
     pub uart7: Uart<7>,
+    /// Watch Dog Timer.
+    pub wdog: Wdog,
     /// Warm Reset Information.
     pub wri: Wri,
     /// Secure ID.
@@ -124,6 +126,8 @@ soc! {
     pub struct UART6 => 0x18716000, artinchip_hal::uart::RegisterBlock;
     /// Universal Asynchronous Receiver-Transmitter 7.
     pub struct UART7 => 0x18717000, artinchip_hal::uart::RegisterBlock;
+    /// Watch Dog Timer.
+    pub struct WDOG => 0x19000000, artinchip_hal::wdog::RegisterBlock;
     /// Warm Reset Information.
     pub struct WRI => 0x1900F000, artinchip_hal::wri::RegisterBlock;
     /// Secure ID.
@@ -176,6 +180,7 @@ impl Peripherals {
             uart5: Uart::__new(UART5::ptr()),
             uart6: Uart::__new(UART6::ptr()),
             uart7: Uart::__new(UART7::ptr()),
+            wdog: Wdog::__new(WDOG::ptr()),
             wri: Wri::__new(WRI::ptr()),
             sid: Sid::__new(SID::ptr()),
             rtc: Rtc::__new(RTC::ptr()),
