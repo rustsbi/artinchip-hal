@@ -18,6 +18,7 @@ pub mod sid;
 pub mod spi_enc;
 pub mod sys_cfg;
 pub mod uart;
+pub mod wdog;
 pub mod wri;
 pub mod xspi;
 
@@ -36,6 +37,7 @@ pub mod traits {
     pub use crate::gtc::GtcExt as _;
     pub use crate::rtc::RtcExt as _;
     pub use crate::uart::UartExt as _;
+    pub use crate::wdog::WdogExt as _;
     pub use crate::wri::WriExt as _;
     pub use embedded_hal::delay::DelayNs as _;
     pub use embedded_hal::digital::{InputPin as _, OutputPin as _, StatefulOutputPin as _};
@@ -59,6 +61,7 @@ pub mod instances {
     pub use crate::spi_enc::SpiEnc;
     pub use crate::sys_cfg::SysCfg;
     pub use crate::uart::Uart;
+    pub use crate::wdog::Wdog;
     pub use crate::wri::Wri;
     pub use crate::xspi::Xspi;
 }
