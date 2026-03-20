@@ -1,6 +1,6 @@
 //! Internal module of setting GPIO modes.
 
-use super::register::{GpioGroup, PinConfig, RegisterBlock};
+use artinchip_hal::gpio::*;
 
 /// Internal function to set GPIO pad mode.
 #[inline]

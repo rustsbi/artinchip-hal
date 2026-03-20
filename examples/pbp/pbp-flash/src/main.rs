@@ -1,11 +1,11 @@
 #![no_std]
 #![no_main]
 
-use artinchip_hal::gpio::*;
 use artinchip_hal::gtc::*;
 use artinchip_hal::prelude::*;
 use artinchip_hal::qspi::*;
 use artinchip_hal::uart::*;
+use artinchip_rt::prelude::*;
 use artinchip_rt::{Peripherals, pbp_entry};
 use embedded_io::Write;
 use panic_halt as _;
@@ -16,16 +16,16 @@ use w25qxxxjv::{Model, SpiSpeed, W25QXXXJV};
 fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
     let p = Peripherals::take();
 
-    let tx = p.gpioa.pa0.into_function::<5>();
-    let rx = p.gpioa.pa1.into_function::<5>();
+    let tx = p.gpioa.pa0.into_uart0_tx();
+    let rx = p.gpioa.pa1.into_uart0_rx();
     let mut uart0 = p.uart0.new_blocking(tx, rx, UartConfig::default(), &p.cmu);
 
     let mut led = p.gpioa.pa5.into_pull_up_output();
     let mut delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &p.cmu);
 
-    let sck = p.gpiob.pb4.into_function::<2>();
-    let miso = p.gpiob.pb1.into_function::<2>();
-    let mosi = p.gpiob.pb5.into_function::<2>();
+    let sck = p.gpiob.pb4.into_qspi0_sck();
+    let miso = p.gpiob.pb1.into_qspi0_miso();
+    let mosi = p.gpiob.pb5.into_qspi0_mosi();
 
     let cs = p.gpiob.pb2.into_pull_up_output();
     let qspi0_pad = (

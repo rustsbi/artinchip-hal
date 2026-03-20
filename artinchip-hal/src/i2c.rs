@@ -5,7 +5,6 @@ mod config;
 mod i2c_ext;
 mod instance;
 mod pad;
-mod pin_mux;
 mod register;
 
 pub use blocking::*;

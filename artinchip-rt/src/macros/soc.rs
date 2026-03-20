@@ -34,29 +34,3 @@ macro_rules! soc {
         )+
     };
 }
-
-/// NOTE: GPIO struct must be implemented before using this macro.
-macro_rules! gpio {
-    ($Pads:ident, $G:expr, [$($N:tt),*]) => {
-        paste! {
-            #[doc = concat!("GPIO", $G, " pads.")]
-            pub struct $Pads {
-                $(
-                    #[doc = concat!("GPIO pad P", $G, $N, ".")]
-                    pub [<p $G:lower $N>]: artinchip_hal::gpio::GpioPad<$G, $N>,
-                )*
-            }
-
-            impl $Pads {
-                #[inline]
-                const fn __new() -> Self {
-                    Self {
-                        $(
-                            [<p $G:lower $N>]: unsafe {artinchip_hal::gpio::GpioPad::__new(&*GPIO::ptr())},
-                        )*
-                    }
-                }
-            }
-        }
-    };
-}

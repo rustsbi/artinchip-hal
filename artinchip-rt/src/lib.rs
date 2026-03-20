@@ -4,10 +4,16 @@
 pub use artinchip_rt_macros::pbp_entry;
 
 #[macro_use]
-pub mod marcos;
+pub mod macros;
 pub mod core;
+pub mod gpio;
 pub mod pbp;
 pub mod soc;
+
+/// ArtInChip RT prelude.
+pub mod prelude {
+    pub use crate::gpio::PadExt as _;
+}
 
 #[cfg(feature = "d13x")]
 pub use soc::d13x::Peripherals;

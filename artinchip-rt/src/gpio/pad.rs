@@ -4,7 +4,7 @@ use super::function::Function;
 use super::input::Input;
 use super::output::Output;
 use super::pad_ext::PadExt;
-use super::register::RegisterBlock;
+use artinchip_hal::gpio::*;
 use core::marker::PhantomData;
 
 /// GPIO pad with statically known GPIO group and number.
