@@ -221,3 +221,41 @@ macro_rules! i2c_sda {
         )+
     };
 }
+
+/// Implements the `PortA` trait for multiple PWM pins.
+#[allow(unused_macros)]
+macro_rules! pwm_a {
+    ($pwm_num:expr, $(($port:literal, $pin:expr, $func:expr)),+) => {
+        $(
+            impl artinchip_hal::pwm::PortA<$pwm_num> for crate::gpio::Function<'_, $port, $pin, $func> {}
+
+            paste! {
+                impl<'a> crate::gpio::GpioPad<$port, $pin> {
+                    #[inline]
+                    pub fn [<into_pwm_ch $pwm_num _a>](self) -> crate::gpio::Function<'a, $port, $pin, $func> {
+                        self.into_function::<$func>()
+                    }
+                }
+            }
+        )+
+    };
+}
+
+/// Implements the `PortB` trait for multiple PWM pins.
+#[allow(unused_macros)]
+macro_rules! pwm_b {
+    ($pwm_num:expr, $(($port:literal, $pin:expr, $func:expr)),+) => {
+        $(
+            impl artinchip_hal::pwm::PortB<$pwm_num> for crate::gpio::Function<'_, $port, $pin, $func> {}
+
+            paste! {
+                impl<'a> crate::gpio::GpioPad<$port, $pin> {
+                    #[inline]
+                    pub fn [<into_pwm_ch $pwm_num _b>](self) -> crate::gpio::Function<'a, $port, $pin, $func> {
+                        self.into_function::<$func>()
+                    }
+                }
+            }
+        )+
+    };
+}

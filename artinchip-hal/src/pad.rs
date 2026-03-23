@@ -7,3 +7,6 @@ impl<const I: u8> super::qspi::MasterOutSlaveIn<I> for NoPad {}
 impl<const I: u8> super::qspi::ChipSelect<I> for NoPad {}
 impl<const I: u8> super::qspi::Hold<I> for NoPad {}
 impl<const I: u8> super::qspi::WriteProtect<I> for NoPad {}
+
+impl<const I: u8> super::pwm::PortA<I> for NoPad {}
+impl<const I: u8> super::pwm::PortB<I> for NoPad {}

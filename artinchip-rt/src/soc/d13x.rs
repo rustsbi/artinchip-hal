@@ -76,6 +76,8 @@ pub struct Peripherals {
     pub i2c1: I2c<1>,
     /// Inter-Integrated Circuit 2.
     pub i2c2: I2c<2>,
+    /// Pulse Width Modulation.
+    pub pwm: PwmChannels,
     /// Core Local Interrupt.
     pub clint: Clint,
     /// Core Local Interrupt Controller.
@@ -143,6 +145,8 @@ soc! {
     pub struct I2C1 => 0x19221000, artinchip_hal::i2c::RegisterBlock;
     /// Inter-Integrated Circuit 2.
     pub struct I2C2 => 0x19222000, artinchip_hal::i2c::RegisterBlock;
+    /// Pulse Width Modulation.
+    pub struct PWM => 0x19240000, artinchip_hal::pwm::RegisterBlock;
     /// Core Local Interrupt.
     pub struct CLINT => 0x20000000, artinchip_hal::clint::RegisterBlock;
     /// Core Local Interrupt Controller.
@@ -189,6 +193,7 @@ impl Peripherals {
             i2c0: I2c::__new(I2C0::ptr()),
             i2c1: I2c::__new(I2C1::ptr()),
             i2c2: I2c::__new(I2C2::ptr()),
+            pwm: PwmChannels::__new(PWM::ptr()),
             clint: Clint::__new(CLINT::ptr()),
             clic: Clic::__new(CLIC::ptr()),
         }
@@ -266,3 +271,13 @@ i2c_scl!(1, ('A', 2, 4), ('C', 4, 4), ('D', 2, 4)); // I2C1
 i2c_sda!(1, ('A', 3, 4), ('C', 5, 4), ('D', 3, 4));
 i2c_scl!(2, ('A', 8, 4), ('C', 0, 4), ('D', 4, 4)); // I2C2
 i2c_sda!(2, ('A', 9, 4), ('C', 6, 4), ('D', 5, 4));
+
+// PWM pin mux for D13x series.
+pwm_a!(0, ('D', 6, 2), ('E', 0, 3)); // Channel 0
+pwm_b!(0, ('D', 7, 2), ('E', 1, 3));
+pwm_a!(1, ('D', 8, 3), ('E', 11, 3)); // Channel 1
+pwm_b!(1, ('D', 16, 2), ('E', 12, 3));
+pwm_a!(2, ('D', 17, 2), ('E', 13, 3)); // Channel 2
+pwm_b!(2, ('D', 25, 5), ('E', 15, 3));
+pwm_a!(3, ('D', 26, 5), ('E', 16, 3)); // Channel 3
+pwm_b!(3, ('D', 27, 5), ('E', 17, 3));

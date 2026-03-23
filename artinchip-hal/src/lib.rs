@@ -11,6 +11,7 @@ pub mod gpio;
 pub mod gtc;
 pub mod i2c;
 pub mod pad;
+pub mod pwm;
 pub mod qspi;
 pub mod rtc;
 pub mod sdmc;
@@ -34,6 +35,7 @@ pub mod prelude {
 pub mod traits {
     pub use crate::dma::DmaExt as _;
     pub use crate::gtc::GtcExt as _;
+    pub use crate::pwm::PwmExt as _;
     pub use crate::rtc::RtcExt as _;
     pub use crate::uart::UartExt as _;
     pub use crate::wdog::WdogExt as _;
@@ -53,6 +55,7 @@ pub mod instances {
     pub use crate::dma::Dma;
     pub use crate::gtc::Gtc;
     pub use crate::i2c::I2c;
+    pub use crate::pwm::{PwmChannel, PwmChannels};
     pub use crate::qspi::Qspi;
     pub use crate::rtc::Rtc;
     pub use crate::sdmc::Sdmc;
