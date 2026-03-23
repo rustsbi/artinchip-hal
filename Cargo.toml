@@ -9,5 +9,6 @@ members = [
     "examples/pbp/pbp-boot-info",
     "examples/pbp/pbp-flash",
     "examples/pbp/pbp-dma",
+    "examples/pbp/pbp-pwm",
 ]
 resolver = "3"
