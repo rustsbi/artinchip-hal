@@ -4,6 +4,7 @@ on: [push, pull_request]
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_HTTP_MULTIPLEXING: false
 
 jobs:
   fmt:
@@ -57,7 +58,7 @@ jobs:
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin
       - name: Generate code coverage
-        run: cargo tarpaulin --engine llvm -p artinchip-hal --all-features --out Html --output-dir ./coverage-report
+        run: cargo tarpaulin --engine llvm -p artinchip-hal --features "d13x clic_interrupts" --out Html --output-dir ./coverage-report
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
@@ -69,17 +70,34 @@ jobs:
     needs: fmt
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        PACKAGE: [artinchip-hal, artinchip-rt]
-        FEATURES: [d12x, d13x, d21x, g73x, m6800]
+        # Bind each package to its specific interrupt feature
+        PACKAGE: 
+          - name: artinchip-hal
+            int_feat: clic_interrupts
+          - name: artinchip-rt
+            int_feat: interrupts
+        CHIP_FEATURE: [d12x, d13x, d21x, g73x, m6800]
+        ENABLE_INT: [false, true] 
+        # Exclude unsupported combinations (D21x has no CLIC)
+        exclude:
+          - CHIP_FEATURE: d21x
+            ENABLE_INT: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: stable
+          toolchain: nightly
+          target: riscv32imac-unknown-none-elf
           components: clippy
       - name: Run cargo clippy
-        run: cargo clippy -p ${{ matrix.PACKAGE }} --all-targets --features ${{ matrix.FEATURES }} -- -D warnings
+        run: |
+          FEATURES="${{ matrix.CHIP_FEATURE }}"
+          if [ "${{ matrix.ENABLE_INT }}" = "true" ]; then
+            FEATURES="$FEATURES ${{ matrix.PACKAGE.int_feat }}"
+          fi
+          cargo clippy -p ${{ matrix.PACKAGE.name }} --target riscv32imac-unknown-none-elf --features "$FEATURES" -- -D warnings
 
   clippy-aicfwc:
      name: Clippy Check aicfwc
@@ -113,9 +131,10 @@ jobs:
     needs: fmt
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         FEATURES: [d13x]
-        EXAMPLES: [pbp-blinky, pbp-hello-world, pbp-i2c-master, pbp-boot-info, pbp-flash, pbp-dma, pbp-pwm]
+        EXAMPLES: [pbp-blinky, pbp-hello-world, pbp-i2c-master, pbp-boot-info, pbp-flash, pbp-dma, pbp-pwm, pbp-async-uart]
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1

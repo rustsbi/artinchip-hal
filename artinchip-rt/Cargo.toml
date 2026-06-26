@@ -15,6 +15,7 @@ paste = "1.0"
 xuantie-riscv = { git = "https://github.com/rustsbi/xuantie.git", branch = "main" }
 
 [features]
+interrupts = []
 d12x = []
 d13x = []
 d21x = []

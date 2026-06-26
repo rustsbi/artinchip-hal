@@ -1,0 +1,20 @@
+[package]
+name = "pbp-async-uart"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+panic-halt = "1.0.0"
+embedded-io = "0.7.1"
+embedded-io-async = "0.7.0"
+embassy-futures = "0.1.1"
+critical-section = "1.2.0"
+riscv = { version = "0.16.0", features = ["critical-section-single-hart"] }
+heapless = "0.8"
+artinchip-hal = { version = "0.0.0", path = "../../../artinchip-hal" }
+artinchip-rt = { version = "0.0.0", path = "../../../artinchip-rt" }
+
+[features]
+default = ["d13x", "artinchip-rt/interrupts", "artinchip-hal/clic_interrupts"]
+d13x = ["artinchip-rt/d13x", "artinchip-hal/d13x"]
+# TODO other features for all the chips.
