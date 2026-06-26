@@ -13,10 +13,14 @@ uart16550 = "0.0.1"
 embedded-hal = "1.0.0"
 embedded-time = "0.12.1"
 embedded-io = "0.7.1"
-riscv = "0.15.0"
+embedded-io-async = "0.7.0"
+riscv = { version = "0.16.0", features = ["critical-section-single-hart"] }
+critical-section = "1.2.0"
+embassy-sync = "0.8.0"
 xuantie-riscv = {git = "https://github.com/rustsbi/xuantie.git", branch = "main"}
 
 [features]
+clic_interrupts = []
 d12x = []
 d13x = []
 d21x = []

@@ -1,5 +1,6 @@
 //! Bare-metal ROM runtime for ArtInChip chips.
 #![no_std]
+#![feature(abi_riscv_interrupt)]
 
 pub use artinchip_rt_macros::pbp_entry;
 

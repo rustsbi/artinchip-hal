@@ -10,6 +10,8 @@ pub mod dma;
 pub mod gpio;
 pub mod gtc;
 pub mod i2c;
+#[cfg(feature = "clic_interrupts")]
+pub mod interrupt;
 pub mod pad;
 pub mod pwm;
 pub mod qspi;
@@ -18,6 +20,7 @@ pub mod sdmc;
 pub mod sid;
 pub mod spi_enc;
 pub mod sys_cfg;
+pub mod types;
 pub mod uart;
 pub mod wdog;
 pub mod wri;
