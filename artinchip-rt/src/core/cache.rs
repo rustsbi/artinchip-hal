@@ -2,6 +2,22 @@
 
 use core::sync::atomic::{Ordering, fence};
 use xuantie_riscv::asm::{dcache_cipa, dcache_ipa};
+use xuantie_riscv::register::mhcr;
+
+/// Enable I-Cache and D-Cache.
+///
+/// Must be called after vector table initialization and before main.
+///
+/// # Safety
+/// Caller must ensure vector table is already written to memory
+/// and I-cache will be coherent after the subsequent `fence.i`.
+#[unsafe(no_mangle)]
+pub(crate) extern "C" fn _enable_cache() {
+    unsafe {
+        mhcr::set_ie();
+        mhcr::set_de();
+    }
+}
 
 #[cfg(any(
     feature = "d12x",

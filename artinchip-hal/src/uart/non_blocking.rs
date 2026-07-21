@@ -20,6 +20,7 @@ const RX_BUF_SIZE: usize = 256;
 const TX_BUF_SIZE: usize = 256;
 const TX_BUSY_SPIN_LIMIT: usize = 200_000;
 
+/// Per-UART async state: wakers for rx/tx, and ring buffers protected by critical sections.
 pub struct AsyncState {
     pub rx_waker: AtomicWaker,
     pub tx_waker: AtomicWaker,
@@ -56,6 +57,8 @@ pub static UART_STATES: [AsyncState; 8] = [
     AsyncState::new(),
 ];
 
+/// If the tx buffer is non-empty and THRE is not already enabled,
+/// enable THRE so the interrupt handler will drain the buffer.
 #[inline]
 fn kick_tx_if_idle(reg: &RegisterBlock, state: &AsyncState) {
     // Just peek into the buffer to see if there's any data
@@ -112,9 +115,12 @@ where
                     reg.uart16550.rbr_thr().tx_data(byte);
                 } else {
                     critical_section::with(|_| {
-                        // FIFO is empty, must disable THRE interrupt to avoid infinite interrupt storm
+                        // FIFO is empty, disable THRE to avoid infinite IRQ storm
                         let ier = uart16550.ier().read();
                         uart16550.ier().write(ier.disable_thre());
+                        // Read IIR to clear the latched THRE status;
+                        // otherwise the CLIC will keep re-triggering
+                        let _ = uart16550.iir_fcr().read();
                     });
                     state.tx_waker.wake();
                 }
@@ -169,7 +175,7 @@ where
             _ => panic!("Invalid UART index"),
         };
         unsafe {
-            // Initialize module clock.
+            // Initialize module clock
             uart_clk.modify(|v| v.set_module_clk_div(fix_mod_div).enable_module_clk());
             uart_clk.modify(|v| v.enable_bus_clk());
             uart_clk.modify(|v| v.enable_module_reset());
@@ -218,6 +224,13 @@ where
 
         // Enable FIFO and set trigger levels
         uart16550.iir_fcr().write(TriggerLevel::_14.and_reset());
+
+        // Wait for TX shift register to become idle to avoid glitch
+        // from FIFO reset propagating to the wire
+        while reg.usr.read().is_busy() {
+            core::hint::spin_loop();
+        }
+
         Self {
             reg,
             _tx: tx,

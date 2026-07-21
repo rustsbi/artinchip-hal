@@ -24,8 +24,6 @@ static mut STACK: [u8; STACK_SIZE] = [0u8; STACK_SIZE];
 const STACK_SIZE: usize = 1024; // 1 KiB
 
 const MXSTATUS: u16 = 0x7c0;
-const MHCR: u16 = 0x7c1;
-const MHINT: u16 = 0x7c5;
 const MEXSTATUS: u16 = 0x7e1;
 
 #[unsafe(naked)]
@@ -37,19 +35,11 @@ pub extern "C" fn _start() {
         "   csrw    mie, zero",
 
         // 2. Hart specific initialization
-        // Best performance register configuration:
-        // - Enable T-Head caches (BTB=1, BPE=1, RS=1, WA=1, WB=1, DE=1, IE=1)
-        // in `mhcr` register.
-        // - Enable T-Head hint operations (PREF_N=3, AMR=1, D_PLD=1)
-        // in `mhint` register.
         // - Enable T-Head instruction sets (THEADISAEE) and
         // misaligned access (MM) in `mxstatus` register.
+        // Cache (MHCR/MHINT) enabled later via enable_cache().
         // TODO SPUSHEN and SPSWAPEN in `mexstatus` once we have trap handler
-        "   li      t0, 0x103f
-            csrw    {mhcr}, t0
-            li      t1, 0x600c
-            csrs    {mhint}, t1
-            li      t2, 0x408000
+        "   li      t2, 0x408000
             csrs    {mxstatus}, t2",
 
         // 3. Initialize float point unit
@@ -70,10 +60,15 @@ pub extern "C" fn _start() {
         // 5. Prepare programming language stack
         "2: la      sp, {stack} + {stack_size}",
 
-        // 6. Start Rust main function
+        // 6. Init vector table and enable caches before main
+        "   call    {init_vector_table}",
+        "   call    {enable_cache}",
+        "   fence.i",
+
+        // 7. Start Rust main function
         "   j       {main}",
 
-        // 7. Platform halt (by loop-wfi) if main function returns
+        // 8. Platform halt (by loop-wfi) if main function returns
         // Set T-Head wfi behavior to deep-sleep, disable interrupt then
         // loop-wfi. Clears LPMD=0 and WFEEN=0 in `mexstatus`.
         "   li      t0, 0x1c
@@ -82,16 +77,18 @@ pub extern "C" fn _start() {
         3:  wfi
             j       3b",
 
-        stack_size = const STACK_SIZE,
-        stack      =   sym STACK,
-        main       =   sym pbp_main,
-        mxstatus   =   const MXSTATUS,
-        mhcr       =   const MHCR,
-        mhint      =   const MHINT,
-        mexstatus  =   const MEXSTATUS,
+        stack_size       = const STACK_SIZE,
+        stack            =   sym STACK,
+        main             =   sym pbp_main,
+        init_vector_table =  sym _init_vector_table,
+        enable_cache     =   sym _enable_cache,
+        mxstatus         =   const MXSTATUS,
+        mexstatus        =   const MEXSTATUS,
     )
 }
 
 unsafe extern "C" {
-    fn pbp_main(boot_param: u32, priv_addr: *const u8, priv_len: u32);
+    unsafe fn pbp_main(boot_param: u32, priv_addr: *const u8, priv_len: u32);
+    unsafe fn _init_vector_table();
+    unsafe fn _enable_cache();
 }

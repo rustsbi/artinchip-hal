@@ -12,12 +12,6 @@ global_asm!(
     "
 );
 
-// Only look for the external dispatcher if the interrupts feature is active
-#[cfg(feature = "interrupts")]
-unsafe extern "C" {
-    unsafe fn __artinchip_dispatch_interrupt(irq_id: usize);
-}
-
 /// The default trap handler for Machine Mode (M-Mode).
 ///
 /// # Safety
@@ -27,27 +21,31 @@ unsafe extern "C" {
 /// restore the context (registers) before and after execution.
 #[unsafe(no_mangle)]
 pub unsafe extern "riscv-interrupt-m" fn DefaultTrapHandler() {
-    let mcause: usize;
-    unsafe {
-        core::arch::asm!("csrr {}, mcause", out(reg) mcause);
+    loop {
+        core::hint::spin_loop();
     }
+}
 
-    let is_interrupt = (mcause as isize) < 0;
+/// Placeholder vector table for non‑interrupt builds.
+/// Required by the linker script (`.clic.vector_table` with `KEEP`).
+/// Zero‑sized — merely marks the section so the linker doesn't error.
+#[cfg(not(feature = "interrupts"))]
+mod placeholder {
+    #[repr(C, align(64))]
+    #[allow(dead_code)]
+    struct ClicVectorTable([u32; 0]);
 
-    if is_interrupt {
-        // Pass to the user's dispatcher
-        #[cfg(feature = "interrupts")]
-        unsafe {
-            __artinchip_dispatch_interrupt(mcause & 0xFFF);
-        }
+    #[unsafe(link_section = ".clic.vector_table")]
+    static _PLACEHOLDER: ClicVectorTable = ClicVectorTable([0; 0]);
 
-        // If a hardware interrupt somehow fires while the feature
-        // is off, safely catch it in a spin loop to prevent unpredictable behavior.
-        #[cfg(not(feature = "interrupts"))]
-        loop {
-            core::hint::spin_loop();
-        }
-    } else {
-        panic!("Hardware Exception Fatal Error! mcause: {:#X}", mcause);
+    /// Empty implementation for when interrupts are not enabled.
+    ///
+    /// # Safety
+    ///
+    /// This function does nothing, only serves as a placeholder
+    /// to satisfy the linker when interrupts are disabled.
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn _init_vector_table() {
+        // Do nothing if CLIC interrupts are not enabled in Cargo.toml
     }
 }

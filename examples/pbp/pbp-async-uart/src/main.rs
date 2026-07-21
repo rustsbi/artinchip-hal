@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![feature(abi_riscv_interrupt)]
 
 use artinchip_hal::clic_bind_interrupts;
 use artinchip_hal::prelude::*;
@@ -41,10 +42,6 @@ das Vergissmeinnicht, das du mir gegeben hast, ist hier"#;
 #[pbp_entry]
 fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
     let mut p = Peripherals::take();
-
-    unsafe {
-        Irqs::init_clic_and_interrupts();
-    }
 
     let uart0_tx = p.gpioa.pa0.into_uart0_tx();
     let uart0_rx = p.gpioa.pa1.into_uart0_rx();

@@ -11,33 +11,37 @@ fn main() {
 }
 
 const LINKER_SCRIPT: &[u8] = b"OUTPUT_ARCH(riscv)
-ENTRY(_start) 
+ENTRY(_start)
 SECTIONS {
     . = 0x30044000 - 0x8;
-	.head : ALIGN(4) {		
+	.head : ALIGN(4) {
         KEEP(*(.head.pbp))
 	}
     . = 0x30044000;
-    .text : ALIGN(4) { 
+    .text : ALIGN(4) {
         *(.text.entry)
         *(.text .text.*)
     }
-    .rodata : ALIGN(4) { 
+    .rodata : ALIGN(4) {
         srodata = .;
         *(.rodata .rodata.*)
         *(.srodata .srodata.*)
-        . = ALIGN(4);  
+        . = ALIGN(4);
         erodata = .;
-    } 
-    .data : ALIGN(4) { 
+    }
+    .clic.vector_table (NOLOAD) : ALIGN(64) {
+        KEEP(*(.clic.vector_table))
+        . = ALIGN(64);
+    }
+    .data : ALIGN(4) {
         sdata = .;
         *(.data .data.*)
         *(.sdata .sdata.*)
-        . = ALIGN(4); 
+        . = ALIGN(4);
         edata = .;
     }
     sidata = LOADADDR(.data);
-    .bss (NOLOAD) : ALIGN(4) {  
+    .bss (NOLOAD) : ALIGN(4) {
         *(.bss.uninit)
         sbss = .;
         *(.bss .bss.*)

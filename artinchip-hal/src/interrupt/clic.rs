@@ -139,66 +139,94 @@ macro_rules! clic_interrupt_mod {
 
 #[macro_export]
 macro_rules! clic_bind_interrupts {
-    ($vis:vis struct $name:ident { $($irq:ident => $($handler:ty),*;)* }) => {
-        #[derive(Copy, Clone)]
-        $vis struct $name;
-
-        // #[no_mangle] and extern "C" ensure the linker can resolve it across crates.
-        #[unsafe(no_mangle)]
-        pub extern "C" fn __artinchip_dispatch_interrupt(irq_id: usize) {
-            match irq_id as u8 {
-                $(
-                    <$crate::interrupt::clic::typelevel::$irq as $crate::interrupt::clic::typelevel::Interrupt>::IRQ => {
-                        unsafe {
-                            $(
-                                <$handler as $crate::interrupt::clic::typelevel::Handler<
-                                    $crate::interrupt::clic::typelevel::$irq
-                                >>::on_interrupt();
-                            )*
-                        }
+    ($vis:vis struct $name:ident { $($irq:ident => $handler:ty;)* }) => {
+        paste::paste! {
+            // Generate hardware vector entry for each bound interrupt
+            $(
+                #[unsafe(no_mangle)]
+                pub extern "riscv-interrupt-m" fn [<__irq_handler_ $irq>]() {
+                    unsafe {
+                        <$handler as $crate::interrupt::clic::typelevel::Handler<
+                            $crate::interrupt::clic::typelevel::$irq
+                        >>::on_interrupt();
                     }
-                )*
-                _ => {
-                    // Unregistered ghost interrupt, just ignore it. This is a safety measure to prevent unexpected behavior.
                 }
+            )*
+
+            // Default handler (for unbound interrupts)
+            #[unsafe(no_mangle)]
+            pub extern "riscv-interrupt-m" fn __irq_handler_default() {
+                loop { core::hint::spin_loop(); }
             }
-        }
 
-        impl $name {
-            // One-click initialization for CLIC hardware and bound interrupts
-            pub unsafe fn init_clic_and_interrupts() {
-                // Import the trampoline address exposed by the RT crate
-                unsafe extern "C" { fn AlignedTrapHandler(); }
-                let trap_addr = AlignedTrapHandler as *const () as usize;
+            // Global vector table, 64‑byte aligned (required by E907 CLIC mtvt hardware)
+            #[repr(C, align(64))]
+            struct ClicVectorTable([u32; 128]);
 
-                // Configure mtvec (Mode 3: CLIC)
-                ::core::arch::asm!("csrw mtvec, {}", in(reg) trap_addr | 3);
+            #[unsafe(link_section = ".clic.vector_table")]
+            static mut VECTOR_TABLE: ClicVectorTable = ClicVectorTable([0; 128]);
 
-                // Initialize the CLIC controller
-                $crate::interrupt::clic::clic_init();
+            #[derive(Copy, Clone)]
+            $vis struct $name;
 
-                // Automatically configure and enable each interrupt bound in the macro
-                $(
-                    let irq_num = <$crate::interrupt::clic::typelevel::$irq as $crate::interrupt::clic::typelevel::Interrupt>::IRQ;
-                    // Default configuration: Max priority(255), Software dispatch(shv=false), Level-triggered(0)
-                    $crate::interrupt::clic::set_priority(irq_num, 255);
-                    $crate::interrupt::clic::set_interrupt_attribute(irq_num, false, 0, 3);
-                    $crate::interrupt::clic::enable_interrupt(irq_num);
-                )*
+            impl $name {
+                /// Initialize CLIC and fill the vector table (call BEFORE cache enable).
+                pub unsafe fn init_vector_table() {
+                    unsafe {
+                        // 1. Set mtvec (CLIC mode = 3, ensure address alignment)
+                        unsafe extern "C" { fn AlignedTrapHandler(); }
+                        let trap_addr = (AlignedTrapHandler as usize & !0x3) | 3;
+                        core::arch::asm!("csrw mtvec, {}", in(reg) trap_addr);
 
-                // Finally, enable global CPU interrupts
-                ::riscv::interrupt::enable();
+                        // 2. Initialize CLIC hardware
+                        $crate::interrupt::clic::clic_init();
+
+                        // 3. Fill all entries with the default handler
+                        let default_addr = (__irq_handler_default as usize & !0x3) as u32;
+                        for entry in VECTOR_TABLE.0.iter_mut() {
+                            *entry = default_addr;
+                        }
+
+                        // 4. Fill entries for bound interrupts and configure CLIC
+                        $(
+                            let irq_num = <$crate::interrupt::clic::typelevel::$irq as $crate::interrupt::clic::typelevel::Interrupt>::IRQ;
+                            let idx = irq_num as usize;
+                            VECTOR_TABLE.0[idx] = ([<__irq_handler_ $irq>] as usize & !0x3) as u32;
+
+                            $crate::interrupt::clic::set_priority(irq_num, 255);
+                            $crate::interrupt::clic::set_interrupt_attribute(irq_num, true, 0, 0);
+                            $crate::interrupt::clic::enable_interrupt(irq_num);
+                        )*
+
+                        // 5. Ensure vector table writes are committed from store buffer to memory
+                        core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
+
+                        let vt_addr = &VECTOR_TABLE as *const _ as usize;
+
+                        // 6. Write mtvt (cache not enabled yet, direct write to memory, no flush needed)
+                        core::arch::asm!("csrw 0x307, {}", in(reg) vt_addr);
+
+                        // 7. Enable global interrupts
+                        ::riscv::interrupt::enable();
+                    }
+                }
+
             }
-        }
 
-        // Apply Binding Trait constraints for each handler
-        $(
+            // Export C ABI function for startup code (pbp.rs) to call
+            #[unsafe(no_mangle)]
+            pub unsafe extern "C" fn _init_vector_table() {
+                unsafe { $name::init_vector_table(); }
+            }
+
+            // 8. Binding constraints
             $(
                 unsafe impl $crate::interrupt::clic::typelevel::Binding<
                     $crate::interrupt::clic::typelevel::$irq,
                     $handler
                 > for $name {}
-            )* )*
+            )*
+        }
     };
 }
 
