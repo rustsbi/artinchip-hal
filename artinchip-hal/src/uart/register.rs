@@ -27,7 +27,10 @@ pub struct RegisterBlock {
     /// UART DMA handshake configuration register (`UART_HSK`).
     #[doc(alias = "UART_HSK")]
     pub hsk: RW<DmaHandshakeConfig>,
-    _reserved1: [u8; 0x18],
+    _reserved1: [u8; 0x14],
+    /// UART receive control register (`RXCTL`).
+    #[doc(alias = "RXCTL")]
+    pub rx_ctl: RW<RxControl>,
     /// UART halt transmit register (`UART_HALT`).
     #[doc(alias = "UART_HALT")]
     pub halt: RW<HaltTx>,
@@ -192,6 +195,53 @@ impl DmaHandshakeConfig {
             0xE5 => DmaHandshakeMode::Handshake,
             _ => unreachable!(),
         }
+    }
+}
+
+/// UART receive control register.
+///
+/// Controls UART receiver enable at the hardware level.
+/// On D13x, the receiver is gated by this register independent of the 16550 core.
+/// Bit 0 (`RXCTL_SWITCH`) must be set to 1 for any data to reach the RBR.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct RxControl(u32);
+
+impl RxControl {
+    const DLAB_ACEN: u32 = 0x1 << 2;
+    const RX_ENABLE: u32 = 0x1;
+
+    /// Enable DLAB auto-clear.
+    #[doc(alias = "DLAB_ACEN")]
+    #[inline]
+    pub const fn enable_dlab_auto_clear(self) -> Self {
+        Self(self.0 | Self::DLAB_ACEN)
+    }
+    /// Disable DLAB auto-clear.
+    #[inline]
+    pub const fn disable_dlab_auto_clear(self) -> Self {
+        Self(self.0 & !Self::DLAB_ACEN)
+    }
+    /// Check if DLAB auto-clear is enabled.
+    #[inline]
+    pub const fn is_dlab_auto_clear_enabled(self) -> bool {
+        (self.0 & Self::DLAB_ACEN) != 0
+    }
+    /// Enable the UART receiver.
+    #[doc = "RX_ENABLE"]
+    #[inline]
+    pub const fn enable_rx(self) -> Self {
+        Self(self.0 | Self::RX_ENABLE)
+    }
+    /// Disable the UART receiver.
+    #[inline]
+    pub const fn disable_rx(self) -> Self {
+        Self(self.0 & !Self::RX_ENABLE)
+    }
+    /// Check if the receiver is enabled.
+    #[inline]
+    pub const fn is_rx_enabled(self) -> bool {
+        (self.0 & Self::RX_ENABLE) != 0
     }
 }
 
@@ -632,12 +682,7 @@ impl Version {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        DebugDlh, DebugDll, DebugRegister, DmaHandshakeConfig, DmaHandshakeMode, HaltTx,
-        ReceiveFifoLevel, RegisterBlock, Rs485AddressMatch, Rs485BusIdleCheck, Rs485BusStatus,
-        Rs485Control, Rs485ControlMode, Rs485DeTime, Rs485SlaveMode, TransmitDelay,
-        TransmitFifoLevel, UartScratch, UartStatus, Version,
-    };
+    use super::*;
     use crate::test_should_panic;
     use core::mem::offset_of;
 
@@ -700,6 +745,24 @@ mod tests {
         val = val.set_handshake_mode(DmaHandshakeMode::Handshake);
         assert_eq!(val.handshake_mode(), DmaHandshakeMode::Handshake);
         assert_eq!(val.0, 0x0000_00E5);
+    }
+
+    #[test]
+    fn struct_rx_control_functions() {
+        let mut val = RxControl(0);
+        val = val.enable_dlab_auto_clear();
+        assert!(val.is_dlab_auto_clear_enabled());
+        assert_eq!(val.0, 0x0000_0004);
+        val = val.disable_dlab_auto_clear();
+        assert!(!val.is_dlab_auto_clear_enabled());
+        assert_eq!(val.0, 0x0000_0000);
+
+        val = val.enable_rx();
+        assert!(val.is_rx_enabled());
+        assert_eq!(val.0, 0x0000_0001);
+        val = val.disable_rx();
+        assert!(!val.is_rx_enabled());
+        assert_eq!(val.0, 0x0000_0000);
     }
 
     #[test]

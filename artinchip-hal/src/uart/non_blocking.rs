@@ -222,13 +222,13 @@ where
                 .set_parity(parity.to_parity()),
         );
 
-        // Enable FIFO and set trigger levels
+        // Enable FIFO and set trigger levels.
         uart16550.iir_fcr().write(TriggerLevel::_14.and_reset());
 
-        // Wait for TX shift register to become idle to avoid glitch
-        // from FIFO reset propagating to the wire
-        while reg.usr.read().is_busy() {
-            core::hint::spin_loop();
+        // Enable the hardware receiver via RXCTL register,
+        // without this, no data reaches the RBR regardless of IER settings.
+        unsafe {
+            reg.rx_ctl.modify(|v| v.enable_rx());
         }
 
         Self {
