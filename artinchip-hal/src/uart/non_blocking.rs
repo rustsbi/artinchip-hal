@@ -17,8 +17,9 @@ use crate::interrupt::clic::typelevel::{self, Interrupt as _};
 use crate::types::RingBuffer;
 
 const RX_BUF_SIZE: usize = 256;
-const TX_BUF_SIZE: usize = 256;
-const TX_BUSY_SPIN_LIMIT: usize = 200_000;
+const TX_BUF_SIZE: usize = 512;
+const TX_FIFO_DEPTH: u16 = 256;
+const RX_BATCH_SPIN_LIMIT: usize = 2000;
 
 /// Per-UART async state: wakers for rx/tx, and ring buffers protected by critical sections.
 pub struct AsyncState {
@@ -102,33 +103,51 @@ where
 
         match pending {
             PendingInterrupt::TransmitterHoldingRegisterEmpty => {
-                let byte = critical_section::with(|cs| state.tx_buffer.borrow_ref_mut(cs).pop());
-                if let Some(byte) = byte {
-                    let mut spins = 0;
-                    while reg.usr.read().is_busy() {
-                        core::hint::spin_loop();
-                        spins += 1;
-                        if spins >= TX_BUSY_SPIN_LIMIT {
-                            break;
-                        }
+                let mut wrote_any = false;
+
+                loop {
+                    if reg.tfl.read().tx_level() >= TX_FIFO_DEPTH {
+                        break;
                     }
+
+                    let byte =
+                        critical_section::with(|cs| state.tx_buffer.borrow_ref_mut(cs).pop());
+                    let Some(byte) = byte else {
+                        critical_section::with(|_| {
+                            // FIFO is empty, disable THRE to avoid infinite IRQ storm.
+                            let ier = uart16550.ier().read();
+                            uart16550.ier().write(ier.disable_thre());
+                            // Read IIR to clear the latched THRE status;
+                            // otherwise the CLIC will keep re-triggering.
+                            let _ = uart16550.iir_fcr().read();
+                        });
+
+                        if wrote_any {
+                            state.tx_waker.wake();
+                        }
+
+                        break;
+                    };
+
                     reg.uart16550.rbr_thr().tx_data(byte);
-                } else {
-                    critical_section::with(|_| {
-                        // FIFO is empty, disable THRE to avoid infinite IRQ storm
-                        let ier = uart16550.ier().read();
-                        uart16550.ier().write(ier.disable_thre());
-                        // Read IIR to clear the latched THRE status;
-                        // otherwise the CLIC will keep re-triggering
-                        let _ = uart16550.iir_fcr().read();
-                    });
-                    state.tx_waker.wake();
+                    wrote_any = true;
                 }
             }
             PendingInterrupt::ReceivedDataAvailable | PendingInterrupt::ReceivedDataTimeout => {
                 critical_section::with(|cs| {
                     let mut rx_buf = state.rx_buffer.borrow_ref_mut(cs);
-                    while uart16550.lsr().read().is_data_ready() {
+                    loop {
+                        let lsr = uart16550.lsr().read();
+                        // Must read RBR on any of: data ready, overrun, parity, or
+                        // framing error.  Otherwise overrun errors leave stale data
+                        // in the FIFO, causing subsequent reads to be misaligned.
+                        if !lsr.is_data_ready()
+                            && !lsr.is_overrun_error()
+                            && !lsr.is_parity_error()
+                            && !lsr.is_framing_error()
+                        {
+                            break;
+                        }
                         rx_buf.push(uart16550.rbr_thr().rx_data()).ok();
                     }
                 });
@@ -231,6 +250,12 @@ where
             reg.rx_ctl.modify(|v| v.enable_rx());
         }
 
+        // Enable RX interrupts so received bytes are pushed into the async RX buffer.
+        // THRE is enabled on demand by `kick_tx_if_idle` when there is pending TX data.
+        uart16550
+            .ier()
+            .write(uart16550.ier().read().enable_rda().enable_rls());
+
         Self {
             reg,
             _tx: tx,
@@ -257,18 +282,52 @@ where
     async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
         let state = &UART_STATES[I as usize];
 
-        let written = critical_section::with(|cs| {
-            let mut tx_buf = state.tx_buffer.borrow_ref_mut(cs);
-            let mut w = 0;
-            for &b in buf {
-                if tx_buf.push(b).is_ok() {
-                    w += 1;
-                } else {
-                    break;
+        let mut written = 0usize;
+
+        while written < buf.len() {
+            let chunk_written = critical_section::with(|cs| {
+                let mut tx_buf = state.tx_buffer.borrow_ref_mut(cs);
+                let mut chunk_written = 0;
+
+                if tx_buf.is_full() {
+                    return 0;
                 }
+
+                for &byte in &buf[written..] {
+                    if tx_buf.push(byte).is_ok() {
+                        chunk_written += 1;
+                    } else {
+                        break;
+                    }
+                }
+
+                chunk_written
+            });
+
+            written += chunk_written;
+
+            if written == buf.len() {
+                break;
             }
-            w
-        });
+
+            if chunk_written == 0 {
+                poll_fn(|cx| {
+                    state.tx_waker.register(cx.waker());
+
+                    let has_space =
+                        critical_section::with(|cs| !state.tx_buffer.borrow_ref(cs).is_full());
+
+                    if has_space {
+                        Poll::Ready(())
+                    } else {
+                        Poll::Pending
+                    }
+                })
+                .await;
+            } else {
+                kick_tx_if_idle(self.reg, state);
+            }
+        }
 
         // Kick once to avoid relying solely on THRE edge, which may cause await to hang occasionally.
         kick_tx_if_idle(self.reg, state);
@@ -307,5 +366,89 @@ where
         }
 
         Ok(())
+    }
+}
+
+impl<'a, const I: u8, TX, RX> embedded_io_async::Read for AsyncSerial<'a, I, TX, RX>
+where
+    TX: UartPad<I> + Transmit<I>,
+    RX: UartPad<I> + Receive<I>,
+    Uart<I>: UartInterrupt<I>,
+{
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        let state = &UART_STATES[I as usize];
+
+        let mut read_len = 0usize;
+
+        loop {
+            let chunk_read = critical_section::with(|cs| {
+                let mut rx_buf = state.rx_buffer.borrow_ref_mut(cs);
+                let mut chunk_read = 0;
+
+                while read_len + chunk_read < buf.len() {
+                    if let Some(byte) = rx_buf.pop() {
+                        buf[read_len + chunk_read] = byte;
+                        chunk_read += 1;
+                    } else {
+                        break;
+                    }
+                }
+
+                chunk_read
+            });
+
+            read_len += chunk_read;
+
+            if read_len > 0 {
+                let mut quiet_spins = 0usize;
+
+                while read_len < buf.len() {
+                    let got_more = critical_section::with(|cs| {
+                        let mut rx_buf = state.rx_buffer.borrow_ref_mut(cs);
+                        let mut chunk_read = 0;
+
+                        while read_len + chunk_read < buf.len() {
+                            if let Some(byte) = rx_buf.pop() {
+                                buf[read_len + chunk_read] = byte;
+                                chunk_read += 1;
+                            } else {
+                                break;
+                            }
+                        }
+
+                        chunk_read
+                    });
+
+                    if got_more > 0 {
+                        read_len += got_more;
+                        quiet_spins = 0;
+                        continue;
+                    }
+
+                    if quiet_spins >= RX_BATCH_SPIN_LIMIT {
+                        return Ok(read_len);
+                    }
+
+                    quiet_spins += 1;
+                    core::hint::spin_loop();
+                }
+
+                return Ok(read_len);
+            }
+
+            poll_fn(|cx| {
+                state.rx_waker.register(cx.waker());
+
+                let has_data =
+                    critical_section::with(|cs| !state.rx_buffer.borrow_ref(cs).is_empty());
+
+                if has_data {
+                    Poll::Ready(())
+                } else {
+                    Poll::Pending
+                }
+            })
+            .await;
+        }
     }
 }

@@ -8,6 +8,7 @@ use artinchip_hal::uart::*;
 use artinchip_rt::{Peripherals, pbp_entry};
 use core::fmt::Write as _;
 use embassy_futures::block_on;
+use embedded_io_async::Read as _;
 use embedded_io_async::Write as _;
 use heapless::String;
 use panic_halt as _;
@@ -51,6 +52,7 @@ fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
 
     block_on(async {
         let mut buf: String<128> = String::new();
+        let mut rx_buf = [0u8; 256];
 
         writeln!(buf, "Welcome to pbp async uart example by artinchip-hal🦀!").ok();
         uart0_async.write_all(buf.as_bytes()).await.ok();
@@ -60,6 +62,17 @@ fn pbp_main(_boot_param: u32, _private_data: &[u8]) {
         uart0_async.write_all(buf.as_bytes()).await.ok();
 
         uart0_async.write_all(TEST_MSG.as_bytes()).await.ok();
+        uart0_async.flush().await.ok();
+
+        buf.clear();
+        writeln!(buf, "\r\n\r\nPlease send a message and press Enter:").ok();
+        uart0_async.write_all(buf.as_bytes()).await.ok();
+
+        let read_len = uart0_async.read(&mut rx_buf).await.ok().unwrap_or(0);
+        buf.clear();
+        writeln!(buf, "You sent:").ok();
+        uart0_async.write_all(buf.as_bytes()).await.ok();
+        uart0_async.write_all(&rx_buf[..read_len]).await.ok();
 
         uart0_async.flush().await.ok();
     });
