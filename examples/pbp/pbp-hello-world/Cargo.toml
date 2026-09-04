@@ -11,7 +11,8 @@ artinchip-rt = { version = "0.0.0", path = "../../../artinchip-rt" }
 log = { version = "0.4", default-features = false }
 
 [features]
-default = ["d13x", "logger"]
+default = ["d13x"]
 logger = ["artinchip-hal/uart-logger"]
-d13x = ["artinchip-rt/d13x", "artinchip-hal/d13x"]
+d13x = ["artinchip-rt/d13x", "artinchip-hal/d13x", "logger"]
+d21x = ["artinchip-rt/d21x", "artinchip-hal/d21x", "logger"]
 # TODO other features for all the chips.

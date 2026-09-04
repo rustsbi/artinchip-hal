@@ -1,191 +1,134 @@
+use aicfwc::checksum::*;
+use aicfwc::raw_img::*;
 use anyhow::{Context, Result, bail};
 use clap::{ArgAction, Parser};
 use md5::{Digest, Md5};
-use std::{fs, io::Write, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 /// AIC firmware converter.
 #[derive(Parser, Debug)]
-#[command(author, version, about)]
+#[command(author, version, about = "ArtInChip image converter")]
 struct Cli {
     /// The input binary file.
     input: PathBuf,
 
-    /// Output as PBP (Pre-Boot Program) format.
-    ///
-    /// PBP format:
-    /// [0..=3]  = b"PBP ",
-    /// [4..=7]  = checksum (u32 LE),
-    /// [8..end] = original binary 4-byte aligned with zero paddings.
-    #[arg(long = "pbp", action = ArgAction::SetTrue)]
-    pbp: bool,
+    /// Generate a bootable raw image in addition to the repaired PBP file.
+    #[arg(long, action = ArgAction::SetTrue)]
+    raw_img: bool,
 
-    /// Output file path.
-    #[arg(short = 'o', long = "output")]
-    output: PathBuf,
+    /// Target SPI NOR media. Required with --raw-img.
+    #[arg(long, action = ArgAction::SetTrue, conflicts_with = "spi_nand")]
+    spi_nor: bool,
+
+    /// Target SPI NAND media. Required with --raw-img.
+    #[arg(long, action = ArgAction::SetTrue, conflicts_with = "spi_nor")]
+    spi_nand: bool,
+
+    /// SPI NAND page size in bytes (2048 or 4096).
+    #[arg(long, default_value_t = 2048, requires = "spi_nand")]
+    nand_page_size: usize,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-
-    // Read the input binary file
-    let bin_data = fs::read(&cli.input)
-        .with_context(|| format!("Failed to read input file {:?}", cli.input))?;
-
-    // Currently only supports -pbp mode; error if not specified
-    if !cli.pbp {
-        bail!("Currently only supports -pbp preprocessing, please add -pbp flag");
+    if cli.raw_img != (cli.spi_nor || cli.spi_nand) {
+        bail!("--raw-img requires exactly one media option: --spi-nor or --spi-nand");
     }
 
-    let pbp_bytes = build_pbp(&bin_data)?;
+    let input =
+        fs::read(&cli.input).with_context(|| format!("failed to read input {:?}", cli.input))?;
+    let pbp = if input.starts_with(b"PBP ") {
+        repair_pbp(input)?
+    } else {
+        build_pbp(&input)
+    };
+    let output_dir = output_dir(&cli.input)?;
+    fs::create_dir_all(&output_dir)
+        .with_context(|| format!("failed to create output directory {output_dir:?}"))?;
 
-    // Write the PBP file
-    let mut f = fs::File::create(&cli.output)
-        .with_context(|| format!("Failed to create output file {:?}", cli.output))?;
-    f.write_all(&pbp_bytes)
-        .with_context(|| format!("Failed to write output file {:?}", cli.output))?;
+    let stem = cli
+        .input
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .context("input file name is not valid UTF-8")?;
+    let pbp_path = output_dir.join(format!("{stem}.pbp"));
+    fs::write(&pbp_path, &pbp).with_context(|| format!("failed to write {pbp_path:?}"))?;
 
-    // Pack into full image format and write .pk_pbp file
-    let image_bytes = pack_pbp(&pbp_bytes)?;
-    let pk_pbp_path = cli.output.with_extension("pk_pbp");
-    let mut f_pk = fs::File::create(&pk_pbp_path)
-        .with_context(|| format!("Failed to create .pk_pbp file {pk_pbp_path:?}"))?;
-    f_pk.write_all(&image_bytes)
-        .with_context(|| format!("Failed to write .pk_pbp file {pk_pbp_path:?}"))?;
+    if cli.raw_img {
+        let aic = pack_aic(&pbp);
+        let image = if cli.spi_nor {
+            nor::build(&aic)
+        } else {
+            nand::build(&aic, cli.nand_page_size)?
+        };
+        let image_path = output_dir.join(format!("{stem}.img"));
+        fs::write(&image_path, image).with_context(|| format!("failed to write {image_path:?}"))?;
+    }
 
     Ok(())
 }
 
-/// Build PBP format:
-/// 0..=3: "PBP "
-/// 4..=7: checksum (written back later)
-/// 8..end: bin content + zero padding to 4-byte alignment
-///
-/// Checksum calculation:
-///   Sum all words of the final PBP file as u32 little-endian (mod 2^32),
-///   requiring the final sum == 0x0fffffff.
-///   First calculate partial_sum with checksum position as 0,
-///   then derive the checksum.
-fn build_pbp(bin: &[u8]) -> Result<Vec<u8>> {
-    // 1. Align bin to 4 bytes
-    let mut aligned = bin.to_vec();
-    while !aligned.len().is_multiple_of(4) {
-        aligned.push(0);
-    }
-
-    // 2. Assemble a placeholder PBP: magic + checksum placeholder + data
-    let total_len = aligned.len();
-    let mut out = Vec::with_capacity(total_len);
-
-    // Data
-    out.extend_from_slice(&aligned);
-
-    // 3. Calculate the current 32-bit sum (with placeholder checksum=0)
-    let mut sum: u64 = 0;
-    for chunk in out.as_chunks::<4>().0 {
-        let word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-        sum = (sum + word as u64) & 0xffff_ffff;
-    }
-
-    // 4. Derive the actual checksum
-    let target: u32 = 0xffff_ffff;
-    let checksum = target.wrapping_sub(sum as u32);
-
-    // 5. Write back checksum (little-endian)
-    out[4..8].copy_from_slice(&checksum.to_le_bytes());
-
-    // 6. Optional: Assert correctness (for debug)
-    debug_assert!(verify_checksum(&out, target));
-
-    Ok(out)
+fn output_dir(input: &Path) -> Result<PathBuf> {
+    let parent = input.parent().context("input has no parent directory")?;
+    let stem = input
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .context("input file name is not valid UTF-8")?;
+    Ok(parent.join(format!("{stem}-out")))
 }
 
-/// Verify if the 32-bit sum of the final file is the target
-fn verify_checksum(buf: &[u8], target: u32) -> bool {
-    if !buf.len().is_multiple_of(4) {
-        return false;
+/// Validate and repair the checksum of a complete, externally produced PBP.
+fn repair_pbp(mut pbp: Vec<u8>) -> Result<Vec<u8>> {
+    if pbp.len() < 8 || &pbp[..4] != b"PBP " {
+        bail!("input must be a PBP binary beginning with the 8-byte PBP header");
     }
-    let mut sum: u64 = 0;
-    for chunk in buf.as_chunks::<4>().0 {
-        let word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-        sum = (sum + word as u64) & 0xffff_ffff;
-    }
-    (sum as u32) == target
+    pbp.resize(pbp.len().next_multiple_of(4), 0);
+    pbp[4..8].fill(0);
+    let checksum = checksum_for_words(&pbp, u32::MAX);
+    pbp[4..8].copy_from_slice(&checksum.to_le_bytes());
+    debug_assert!(verify_checksum(&pbp, u32::MAX));
+    Ok(pbp)
 }
 
-/// Pack PBP data into a complete ArtInChip boot image format
-/// Format: HEAD1 + HEAD2 + DATA1 (PBP) + DATA2 (empty) + SIGN (MD5)
-fn pack_pbp(pbp_data: &[u8]) -> Result<Vec<u8>> {
-    // Constants
-    const HEAD1_SIZE: usize = 8;
-    const HEAD2_SIZE: usize = 248;
-    const SIGN_SIZE: usize = 16; // MD5
-    const ALIGNMENT: usize = 256;
+fn build_pbp(binary: &[u8]) -> Vec<u8> {
+    let mut pbp = Vec::with_capacity((binary.len() + 11).next_multiple_of(4));
+    pbp.extend_from_slice(b"PBP ");
+    pbp.extend_from_slice(&[0; 4]);
+    pbp.extend_from_slice(binary);
+    pbp.resize(pbp.len().next_multiple_of(4), 0);
+    let checksum = checksum_for_words(&pbp, u32::MAX);
+    pbp[4..8].copy_from_slice(&checksum.to_le_bytes());
+    pbp
+}
 
-    // Calculate sizes
-    let pbp_total_len = pbp_data.len(); // PBP header + content
-    let data1_len = pbp_total_len.div_ceil(ALIGNMENT) * ALIGNMENT; // Align to 256 bytes
-    let data2_len = 0; // TODO: Implement DATA2
-    let signed_area_len = HEAD1_SIZE + HEAD2_SIZE + data1_len + data2_len;
-    let total_len = signed_area_len + SIGN_SIZE;
+/// Build an unsigned AIC image whose only resource is the repaired PBP.
+fn pack_aic(pbp: &[u8]) -> Vec<u8> {
+    const AIC_HEADER_SIZE: usize = 256;
+    const RESOURCE_ALIGNMENT: usize = 32;
+    const IMAGE_ALIGNMENT: usize = 256;
+    const MD5_SIZE: usize = 16;
 
-    // Build HEAD1
-    let mut head1 = vec![0u8; HEAD1_SIZE];
-    head1[0..4].copy_from_slice(b"AIC "); // Magic
-    // Checksum will be calculated later
+    let resource_len = pbp.len().next_multiple_of(RESOURCE_ALIGNMENT);
+    let signed_len = (AIC_HEADER_SIZE + resource_len).next_multiple_of(IMAGE_ALIGNMENT);
+    let image_len = signed_len + MD5_SIZE;
+    let mut image = vec![0u8; image_len];
 
-    // Build HEAD2
-    let mut head2 = vec![0u8; HEAD2_SIZE];
-    // Header version: 0x00010001
-    head2[0..4].copy_from_slice(&0x00010001u32.to_le_bytes());
-    // Image length
-    head2[4..8].copy_from_slice(&(total_len as u32).to_le_bytes());
-    // Firmware version: 0.0.0 (anti_rollback=0, revision=0, minor=0, major=0)
-    // Already 0
-    // Loader length: 0
-    // Load address: 0
-    // Entry point: 0
-    // Sign algo: 0 (no signature)
-    // Enc algo: 0
-    // Sign result offset
-    head2[32..36].copy_from_slice(&(signed_area_len as u32).to_le_bytes());
-    // Sign result length: 16
-    head2[36..40].copy_from_slice(&16u32.to_le_bytes());
-    // Other offsets: 0
-    // PBP offset: 256
-    head2[64..68].copy_from_slice(&256u32.to_le_bytes());
-    // PBP length: pbp_data.len()
-    head2[68..72].copy_from_slice(&(pbp_data.len() as u32).to_le_bytes());
-    // Padding: already 0
+    image[..4].copy_from_slice(b"AIC ");
+    image[8..12].copy_from_slice(&0x0001_0001u32.to_le_bytes());
+    image[12..16].copy_from_slice(&(image_len as u32).to_le_bytes());
+    image[40..44].copy_from_slice(&(signed_len as u32).to_le_bytes());
+    image[44..48].copy_from_slice(&(MD5_SIZE as u32).to_le_bytes());
+    image[72..76].copy_from_slice(&(AIC_HEADER_SIZE as u32).to_le_bytes());
+    image[76..80].copy_from_slice(&(pbp.len() as u32).to_le_bytes());
+    image[AIC_HEADER_SIZE..AIC_HEADER_SIZE + pbp.len()].copy_from_slice(pbp);
 
-    // Build DATA1: PBP + padding
-    let mut data1 = vec![0u8; data1_len];
-    data1[0..pbp_data.len()].copy_from_slice(pbp_data);
-
-    // TODO DATA2: empty
-
-    // SIGN: MD5 of HEAD2 + DATA1 + DATA2
-    let signed_data = [head2.as_slice(), data1.as_slice()].concat();
-    let mut hasher = Md5::new();
-    hasher.update(&signed_data);
-    let sign = hasher.finalize().to_vec();
-
-    let signed_area = [head1.as_slice(), head2.as_slice(), data1.as_slice()].concat();
-
-    let mut result = vec![0u8; total_len];
-    result[0..signed_area_len].copy_from_slice(&signed_area);
-    result[signed_area_len..].copy_from_slice(&sign);
-
-    // Calculate HEAD1 checksum
-    let mut sum: u64 = 0;
-    for chunk in result.as_chunks::<4>().0 {
-        let word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-        sum = (sum + word as u64) & 0xffff_ffff;
-    }
-
-    let target: u32 = 0xffff_ffff;
-    let head1_checksum = target.wrapping_sub(sum as u32);
-
-    result[4..8].copy_from_slice(&head1_checksum.to_le_bytes());
-
-    Ok(result)
+    let digest = Md5::digest(&image[8..signed_len]);
+    image[signed_len..].copy_from_slice(&digest);
+    let checksum = checksum_for_words(&image, u32::MAX);
+    image[4..8].copy_from_slice(&checksum.to_le_bytes());
+    debug_assert!(verify_checksum(&image, u32::MAX));
+    image
 }

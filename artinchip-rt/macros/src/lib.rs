@@ -119,7 +119,14 @@ pub fn pbp_entry(args: TokenStream, input: TokenStream) -> TokenStream {
         #[unsafe(export_name = "pbp_main")]
         #(#attrs)*
         pub extern "C" fn #ident(boot_param: u32, priv_addr: *const u8, priv_len: u32) #ret {
-            let private_data = unsafe { core::slice::from_raw_parts(priv_addr, priv_len as usize) };
+            // Images without a DATA2/private resource pass a null pointer.
+            // `from_raw_parts(null, 0)` is still invalid Rust, so represent
+            // that case with the canonical empty slice.
+            let private_data = if priv_addr.is_null() || priv_len == 0 {
+                &[]
+            } else {
+                unsafe { core::slice::from_raw_parts(priv_addr, priv_len as usize) }
+            };
             let boot_param = ::artinchip_rt::core::boot_rom::BootParam::from_raw(boot_param);
             unsafe { __artinchip_rt__pbp_main(boot_param, private_data ) }
         }

@@ -1,7 +1,8 @@
 //! ArtInChip Boot ROM API.
 
-use super::cache::{_disable_cache, dcache_clean_invalidate_range};
+use super::cache::_disable_cache;
 use log::info;
+use xuantie_riscv::asm::dcache_ciall;
 
 /// Boot reason (bits [11:8] of boot_param).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -120,20 +121,7 @@ pub fn print_boot_info(boot_param: &BootParam) {
 
 /// Check startup.
 pub fn check_startup(boot_param: &BootParam) {
-    #[cfg(any(
-        feature = "d12x",
-        feature = "d13x",
-        feature = "g73x",
-        feature = "m6800"
-    ))]
-    {
-        check_e907_upg_req(boot_param);
-    }
-    #[cfg(feature = "d21x")]
-    {
-        // Just read boot reason to avoid unused variable warning
-        let _ = boot_param.boot_reason();
-    }
+    check_upg_req(boot_param);
 }
 
 /// Jump to BROM USB upgrade mode entry for E907 series.
@@ -155,11 +143,11 @@ pub unsafe fn jump_to_e907_upg_entry() {
         }
     };
 
-    // 2. dcache clean + invalidate all
-    unsafe { dcache_clean_invalidate_range(0x3000_0000, 0x10000) };
-
-    // 3. Disable D-Cache and I-Cache
     unsafe {
+        // 2. dcache clean + invalidate all
+        dcache_ciall();
+
+        // 3. Disable D-Cache and I-Cache
         _disable_cache();
 
         // 4. Switch to BROM stack space and jump to upgrade entry
@@ -172,11 +160,46 @@ pub unsafe fn jump_to_e907_upg_entry() {
     }
 }
 
-/// Check if E907 upgrade mode is requested by user.
+/// Jump to BROM USB upgrade mode entry for C906 series.
+///
+/// # Safety
+///
+/// This function will disable caches and jump to BROM upgrade entry point unconditionally.
+pub unsafe fn jump_to_c906_upg_entry() {
+    // 1. Read BROM version magic number to select upgrade entry
+    let brom_ver = unsafe { core::ptr::read_volatile(0x66 as *const u8) };
+    let entry: usize = match brom_ver {
+        0x32 => 0x5c08,
+        _ => {
+            // Unknown BROM version, fall into dead loop
+            loop {
+                core::hint::spin_loop();
+            }
+        }
+    };
+
+    unsafe {
+        // 2. dcache clean + invalidate all
+        dcache_ciall();
+
+        // 3. Disable D-Cache and I-Cache
+        _disable_cache();
+
+        // 4. Switch to BROM stack space and jump to upgrade entry
+        core::arch::asm!(
+            "li sp, 0x103000",
+            "jr a0",
+            in("a0") entry,
+            options(noreturn, nomem, nostack),
+        );
+    }
+}
+
+/// Check if upgrade mode is requested by user.
 ///
 /// If BOOT button (PA0, active-low) is held down on cold boot,
 /// this function will jump to BROM upgrade entry point unconditionally.
-pub fn check_e907_upg_req(boot_param: &BootParam) {
+pub fn check_upg_req(boot_param: &BootParam) {
     // PA group base: 0x18700000
     //   +0x00: input_state (GEN_IN_STA)
     //   +0x80: pin_config[0]  (PIN_CFG)
@@ -215,6 +238,13 @@ pub fn check_e907_upg_req(boot_param: &BootParam) {
     };
 
     if state_0 && state_1 {
-        unsafe { jump_to_e907_upg_entry() };
+        #[cfg(not(feature = "d21x"))]
+        unsafe {
+            jump_to_e907_upg_entry()
+        };
+        #[cfg(feature = "d21x")]
+        unsafe {
+            jump_to_c906_upg_entry()
+        };
     }
 }

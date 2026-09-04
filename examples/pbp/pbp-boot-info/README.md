@@ -2,12 +2,13 @@
 
 ## Build
 
-```
-cargo build -p pbp-boot-info --target riscv32imac-unknown-none-elf --release
-rust-objcopy -O binary target/riscv32imac-unknown-none-elf/release/pbp-boot-info target/riscv32imac-unknown-none-elf/release/pbp-boot-info.bin
-cargo run -p aicfwc -- target/riscv32imac-unknown-none-elf/release/pbp-boot-info.bin --pbp -o target/riscv32imac-unknown-none-elf/release/pbp-boot-info.pbp
+### D13x (E907 series)
+
+```bash
+cargo build -p pbp-boot-info --target riscv32imafc-unknown-none-elf --release
+rust-objcopy -O binary target/riscv32imafc-unknown-none-elf/release/pbp-boot-info target/riscv32imafc-unknown-none-elf/release/pbp-boot-info.bin
+cargo run -p aicfwc -- target/riscv32imafc-unknown-none-elf/release/pbp-boot-info.bin --spi-nor --raw-img
 ```
 
-Your PBP file will be ready at `target/riscv32imac-unknown-none-elf/release/pbp-boot-info.pbp`.
-
-Packed PBP image will be ready at the same path but with `.pk_pbp` extension.
+The converter writes `pbp-boot-info.pbp` and `pbp-boot-info.img` under
+`target/riscv32imafc-unknown-none-elf/release/pbp-boot-info-out/`.

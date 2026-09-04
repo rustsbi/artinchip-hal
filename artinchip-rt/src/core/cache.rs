@@ -2,7 +2,7 @@
 
 use core::sync::atomic::{Ordering, fence};
 use log::error;
-use xuantie_riscv::asm::{dcache_cipa, dcache_ipa};
+use xuantie_riscv::asm::{dcache_ciall, dcache_cipa, dcache_ipa, icache_iall};
 use xuantie_riscv::register::mhcr;
 
 /// Enable I-Cache and D-Cache.
@@ -15,6 +15,8 @@ use xuantie_riscv::register::mhcr;
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn _enable_cache() {
     unsafe {
+        dcache_ciall();
+        icache_iall();
         mhcr::set_ie();
         mhcr::set_de();
     }

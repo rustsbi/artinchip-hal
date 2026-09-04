@@ -58,11 +58,6 @@ where
         let stop_bits = config.stop_bits;
         let parity = config.parity;
 
-        // Halt uart for configuration
-        unsafe {
-            reg.halt.modify(|v| v.set_halt_change_config_at_busy(true));
-        }
-
         // Disable all interrupts
         let uart16550 = &reg.uart16550;
         let interrupt_types = uart16550.ier().read();
@@ -78,11 +73,6 @@ where
         let uart_divisor = fix_mod_clk_rate / (16 * baud_rate);
         uart16550.write_divisor(uart_divisor as u16);
 
-        // Update HALT register to apply configuration
-        unsafe {
-            reg.halt.modify(|v| v.set_halt_change_update(true));
-        }
-
         // Configure line control register
         let lcr = uart16550.lcr().read();
         uart16550.lcr().write(
@@ -94,10 +84,21 @@ where
         // Enable FIFO and set trigger levels.
         uart16550.iir_fcr().write(TriggerLevel::_14.and_reset());
 
+        // Wait for the TX shift register to become idle after FIFO reset.
+        // Without this, the first THRE interrupt may not fire correctly on cold boot.
+        while reg.usr.read().is_busy() {
+            core::hint::spin_loop();
+        }
+
         // Enable the hardware receiver via RXCTL register,
         // without this, no data reaches the RBR regardless of IER settings.
         unsafe {
             reg.rx_ctl.modify(|v| v.enable_rx());
+        }
+
+        // Drain the RX FIFO in case boot noise caused a false start bit.
+        while reg.uart16550.lsr().read().is_data_ready() {
+            let _ = reg.uart16550.rbr_thr().rx_data();
         }
 
         Self { reg, tx, rx }

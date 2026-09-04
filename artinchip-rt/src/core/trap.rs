@@ -4,10 +4,24 @@ use core::arch::global_asm;
 use log::error;
 use riscv::register::*;
 
-// 64-byte aligned trampoline for hardware vectoring requirement
+// The trampoline is used as an `mtvec` target.  CLIC-style chips (D13x and
+// siblings) run it in vectored mode, which requires 64-byte alignment.
+// D21x/C906 uses standard RISC-V direct mode instead, so 4-byte alignment is
+// enough there; a 64-byte demand would also fight the fixed D21x `.text` VMA.
+#[cfg(not(feature = "d21x"))]
 global_asm!(
     "
     .align 6
+    .global AlignedTrapHandler
+    AlignedTrapHandler:
+        j DefaultTrapHandler
+    "
+);
+
+#[cfg(feature = "d21x")]
+global_asm!(
+    "
+    .balign 4
     .global AlignedTrapHandler
     AlignedTrapHandler:
         j DefaultTrapHandler
@@ -108,6 +122,18 @@ mod placeholder {
             core::arch::asm!("csrw mtvec, {}", in(reg) trap_addr);
 
             riscv::interrupt::enable();
+        }
+
+        #[cfg(feature = "d21x")]
+        unsafe {
+            // C906 uses standard RISC-V mtvec direct mode here.  A PBP must
+            // not inherit the BROM trap vector: a synchronous fault would
+            // otherwise return control to ROM instead of stopping in PBP.
+            unsafe extern "C" {
+                fn AlignedTrapHandler();
+            }
+            let trap_addr = AlignedTrapHandler as *const () as usize & !0x3;
+            core::arch::asm!("csrw mtvec, {}", in(reg) trap_addr);
         }
     }
 }

@@ -5,6 +5,7 @@
 pub use artinchip_rt_macros::pbp_entry;
 
 #[macro_use]
+#[cfg(any(feature = "d13x", feature = "d21x"))]
 pub mod macros;
 pub mod core;
 pub mod gpio;
@@ -20,6 +21,9 @@ pub mod prelude {
 #[cfg(feature = "d13x")]
 pub use soc::d13x::Peripherals;
 
-#[cfg(not(feature = "d13x"))]
+#[cfg(feature = "d21x")]
+pub use soc::d21x::Peripherals;
+
+#[cfg(not(any(feature = "d13x", feature = "d21x")))]
 /// Mock peripheral struct for unselected chips.
 pub struct Peripherals {}
