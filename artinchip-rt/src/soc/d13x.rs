@@ -10,6 +10,10 @@ pub struct Peripherals {
     pub dma: Dma,
     /// Crypto Engine.
     pub ce: Ce,
+    /// USB device controller.
+    pub usb_dev: UsbDev,
+    /// USB host controller.
+    pub usb_host: UsbHost<0>,
     /// Expanded Serial Peripheral Interface.
     pub xspi: Xspi,
     /// Quad Serial Peripheral Interface 0.
@@ -89,6 +93,10 @@ soc! {
     pub struct DMA => 0x10000000, artinchip_hal::dma::RegisterBlock;
     /// Crypto Engine.
     pub struct CE => 0x10020000, artinchip_hal::ce::RegisterBlock;
+    /// USB device controller.
+    pub struct USB_DEV => 0x10200000, artinchip_hal::usbdrd::dev_register::RegisterBlock;
+    /// USB host controller.
+    pub struct USB_HOST => 0x10210000, artinchip_hal::usbdrd::host_register::RegisterBlock;
     /// Expanded Serial Peripheral Interface.
     pub struct XSPI => 0x10300000, artinchip_hal::xspi::RegisterBlock;
     /// Quad Serial Peripheral Interface 0.
@@ -160,6 +168,8 @@ impl Peripherals {
         Self {
             dma: Dma::__new(DMA::ptr()),
             ce: Ce::__new(CE::ptr()),
+            usb_dev: UsbDev::__new(USB_DEV::ptr()),
+            usb_host: UsbHost::<0>::__new(USB_HOST::ptr()),
             xspi: Xspi::__new(XSPI::ptr()),
             qspi0: Qspi::__new(QSPI0::ptr()),
             qspi1: Qspi::__new(QSPI1::ptr()),
@@ -221,6 +231,10 @@ gpio!(GpioDPads, 'D', [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,2
 gpio!(GpioEPads, 'E', [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]);
 #[rustfmt::skip]
 gpio!(GpioUPads, 'U', [0,1]);
+
+// USB0 pin mux for D13x series.
+usb_dm!(0, ('U', 0, 2));
+usb_dp!(0, ('U', 1, 2));
 
 // QSPI pin mux for D13x series.
 qspi_sck!(0, ('B', 4, 2)); // QSPI0

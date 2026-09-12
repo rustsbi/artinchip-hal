@@ -1,4 +1,5 @@
 use crate::checksum::*;
+use crate::util::round_up;
 use anyhow::{Result, bail};
 
 /// Build a SPI NAND boot image for candidate block 0: Page 0 is AICP and
@@ -8,7 +9,7 @@ pub fn build(aic: &[u8], page_size: usize) -> Result<Vec<u8>> {
         bail!("SPI NAND page size must be 2048 or 4096 bytes");
     }
 
-    let image_len = aic.len().next_multiple_of(page_size);
+    let image_len = round_up(aic.len(), page_size);
     let page_count = image_len / page_size;
     if page_count + 1 > 101 {
         bail!("SPI NAND image exceeds the 101-entry AICP page table");

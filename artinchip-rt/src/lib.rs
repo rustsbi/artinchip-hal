@@ -2,11 +2,14 @@
 #![no_std]
 #![feature(abi_riscv_interrupt)]
 
-pub use artinchip_rt_macros::pbp_entry;
+pub use artinchip_rt_macros::{app_entry, pbp_entry};
 
 #[macro_use]
 #[cfg(any(feature = "d13x", feature = "d21x"))]
 pub mod macros;
+/// Application image runtime (loader-style entry).
+#[cfg(feature = "app")]
+pub mod app;
 pub mod core;
 pub mod gpio;
 pub mod pbp;

@@ -259,3 +259,43 @@ macro_rules! pwm_b {
         )+
     };
 }
+
+// USB pin multiplexer macros.
+
+/// Implements the `UsbDm` trait for multiple USB data-minus pins.
+#[allow(unused_macros)]
+macro_rules! usb_dm {
+    ($usb_num:expr, $(($port:literal, $pin:expr, $func:expr)),+) => {
+        $(
+            impl artinchip_hal::usbdrd::UsbDm<$usb_num> for crate::gpio::Function<'_, $port, $pin, $func> {}
+
+            paste! {
+                impl<'a> crate::gpio::GpioPad<$port, $pin> {
+                    #[inline]
+                    pub fn [<into_usb $usb_num _dm>](self) -> crate::gpio::Function<'a, $port, $pin, $func> {
+                        self.into_function::<$func>()
+                    }
+                }
+            }
+        )+
+    };
+}
+
+/// Implements the `UsbDp` trait for multiple USB data-plus pins.
+#[allow(unused_macros)]
+macro_rules! usb_dp {
+    ($usb_num:expr, $(($port:literal, $pin:expr, $func:expr)),+) => {
+        $(
+            impl artinchip_hal::usbdrd::UsbDp<$usb_num> for crate::gpio::Function<'_, $port, $pin, $func> {}
+
+            paste! {
+                impl<'a> crate::gpio::GpioPad<$port, $pin> {
+                    #[inline]
+                    pub fn [<into_usb $usb_num _dp>](self) -> crate::gpio::Function<'a, $port, $pin, $func> {
+                        self.into_function::<$func>()
+                    }
+                }
+            }
+        )+
+    };
+}

@@ -10,6 +10,10 @@ members = [
     "examples/pbp/pbp-flash",
     "examples/pbp/pbp-dma",
     "examples/pbp/pbp-pwm",
+    "examples/pbp/pbp-psram",
+    "examples/pbp/pbp-common",
     "examples/pbp/pbp-async-uart",
+    "examples/app/app-bootloader",
+    "examples/app/app-blinky",
 ]
 resolver = "3"

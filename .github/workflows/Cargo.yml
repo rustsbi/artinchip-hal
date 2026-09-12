@@ -134,7 +134,7 @@ jobs:
       fail-fast: false
       matrix:
         FEATURES: [d13x]
-        EXAMPLES: [pbp-blinky, pbp-hello-world, pbp-i2c-master, pbp-boot-info, pbp-flash, pbp-dma, pbp-pwm, pbp-async-uart]
+        EXAMPLES: [pbp-blinky, pbp-hello-world, pbp-i2c-master, pbp-boot-info, pbp-flash, pbp-dma, pbp-pwm, pbp-async-uart, pbp-psram, pbp-common]
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -143,6 +143,27 @@ jobs:
           target: riscv32imafc-unknown-none-elf
       - name: Build examples
         run: cargo build -p ${{ matrix.EXAMPLES }} --target riscv32imafc-unknown-none-elf --release --features ${{ matrix.FEATURES }}
+
+  build-rv32-apps:
+    name: Build Apps for RV32
+    needs: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          target: riscv32imafc-unknown-none-elf
+      # Built one package per invocation: `pbp-common` has a return-capable entry
+      # that conflicts with the app entry at link time.
+      - name: Build app packages
+        run: |
+          cargo build -p app-bootloader --target riscv32imafc-unknown-none-elf --release --features d13x
+          cargo build -p app-blinky --target riscv32imafc-unknown-none-elf --release --features d13x
+      - name: Package images
+        run: |
+          cargo run -p aicfwc -- --build --toml examples/app/app-bootloader
+          cargo run -p aicfwc -- --build --toml examples/app/app-blinky
 
   build-rv64-examples:
     name: Build Examples for RV64

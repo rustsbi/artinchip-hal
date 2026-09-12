@@ -2,6 +2,7 @@
 #![no_std]
 
 pub mod axi_cfg;
+pub mod cache;
 pub mod ce;
 pub mod clic;
 pub mod clint;
@@ -20,8 +21,11 @@ pub mod sdmc;
 pub mod sid;
 pub mod spi_enc;
 pub mod sys_cfg;
+pub mod system;
 pub mod types;
 pub mod uart;
+#[cfg(not(feature = "d12x"))]
+pub mod usbdrd;
 pub mod wdog;
 pub mod wri;
 pub mod xspi;
@@ -43,6 +47,7 @@ pub mod traits {
     pub use crate::uart::UartExt as _;
     pub use crate::wdog::WdogExt as _;
     pub use crate::wri::WriExt as _;
+    pub use crate::xspi::XspiExt as _;
     pub use embedded_hal::delay::DelayNs as _;
     pub use embedded_hal::digital::{InputPin as _, OutputPin as _, StatefulOutputPin as _};
     pub use embedded_hal::i2c::I2c as _;
@@ -66,7 +71,11 @@ pub mod instances {
     pub use crate::spi_enc::SpiEnc;
     pub use crate::sys_cfg::SysCfg;
     pub use crate::uart::Uart;
+    #[cfg(not(feature = "d12x"))]
+    pub use crate::usbdrd::UsbDev;
+    #[cfg(not(feature = "d12x"))]
+    pub use crate::usbdrd::UsbHost;
     pub use crate::wdog::Wdog;
     pub use crate::wri::Wri;
-    pub use crate::xspi::Xspi;
+    pub use crate::xspi::{Xspi, XspiDriver};
 }

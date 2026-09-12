@@ -1,0 +1,21 @@
+[package]
+name = "app-blinky"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+panic-halt = "1.0.0"
+artinchip-hal = { version = "0.0.0", path = "../../../artinchip-hal" }
+artinchip-rt = { version = "0.0.0", path = "../../../artinchip-rt" }
+log = { version = "0.4", default-features = false }
+embedded-hal = "1.0.0"
+
+[features]
+default = ["d13x"]
+logger = ["artinchip-hal/uart-logger"]
+d13x = [
+    "artinchip-rt/d13x",
+    "artinchip-rt/app",
+    "artinchip-hal/d13x",
+    "logger",
+]

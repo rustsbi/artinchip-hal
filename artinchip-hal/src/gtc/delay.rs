@@ -5,6 +5,11 @@ use super::register::{CntFreq, RegisterBlock};
 use crate::cmu::Cmu;
 
 /// Timer delay source.
+///
+/// Holds only a shared reference to the register block, so it is `Copy`: one
+/// handle can drive delays while another reads [`Self::get_tick`] as a
+/// monotonic clock (both only touch the same GTC registers).
+#[derive(Clone, Copy)]
 pub struct TimerDelay<'a> {
     reg: &'a RegisterBlock,
 }

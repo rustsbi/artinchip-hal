@@ -18,6 +18,7 @@ log = { version = "0.4", default-features = false }
 
 [features]
 interrupts = []
+app = []
 d12x = []
 d13x = []
 d21x = []

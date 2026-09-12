@@ -1,0 +1,64 @@
+# Product image manifest for **app-blinky**: custom PBP, bootloader and this app.
+#
+#   cd examples/app/app-blinky
+#   cargo run -p aicfwc -- --build --toml .
+#
+# -> target/riscv32imafc-unknown-none-elf/release/app-blinky-out/app-blinky.img
+
+[image]
+platform = "d13x"
+product = "general-board"
+version = "0.1.0"
+media = "spi-nor"
+media_dev_id = 0
+# Empty boots the first partition after `bootloader` holding a valid AIC image -
+# `app`, where blinky goes. Set `app = "blinky"` to pin it by name.
+app = ""
+
+# Components: see `app-bootloader.toml` for the `updater`/`target` notes.
+
+[[component]]
+kind = "pbp"
+name = "psram"
+updater = true
+ram = 0x30044000
+attr = "required;run"
+build_package = "pbp-common"
+file = "../../../target/riscv32imafc-unknown-none-elf/release/pbp-common"
+filename = "usbupg-psram-init.aic"
+
+# This app; `aicfwc` reads its load address/entry from the ELF.
+[[component]]
+kind = "app"
+name = "blinky"
+build_package = "app-blinky"
+file = "../../../target/riscv32imafc-unknown-none-elf/release/app-blinky"
+filename = "app-blinky.aic"
+partition = "app"
+attr = "mtd;optional"
+
+# The bootloader, once for both roles (see `app-bootloader.toml`).
+[[component]]
+kind = "app"
+name = "bootloader"
+updater = true
+ram = 0x40100000
+attr = "required;run"
+partition = "bootloader"
+build_package = "app-bootloader"
+file = "../../../target/riscv32imafc-unknown-none-elf/release/app-bootloader"
+filename = "bootloader.aic"
+target_filename = "app-bootloader.aic"
+load_address = 0x406c0000
+entry_offset = 0x100
+pbp = "../../../target/riscv32imafc-unknown-none-elf/release/pbp-common"
+
+[[partition]]
+name = "bootloader"
+offset = 0x000000
+size = 0x080000   # 512 KiB
+
+[[partition]]
+name = "app"
+offset = 0x080000
+size = 0x400000   # 4 MiB

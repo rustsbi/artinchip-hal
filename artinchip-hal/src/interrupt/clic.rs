@@ -86,6 +86,25 @@ pub fn is_pending(irq: u8) -> bool {
     clic.interrupts[irq as usize].int_ip.read().is_pending()
 }
 
+/// Mask every interrupt source.
+///
+/// The CLIC's per-source enable bits survive a jump between images (BootROM, PBP
+/// and loader all run on the same core), so an image that wants a quiet
+/// controller - or that enables a single source - has to clear them all first:
+/// a source an earlier stage left enabled stays pending and is delivered to this
+/// image's vector table, and an unbound interrupt lands in the default handler.
+///
+/// # Safety
+/// The CLIC peripheral must be present and mapped on the current SoC.
+pub unsafe fn mask_all_interrupts() {
+    critical_section::with(|_| {
+        let clic = clic();
+        for interrupt in clic.interrupts.iter() {
+            interrupt.int_ie.modify(|v| v.disable());
+        }
+    });
+}
+
 /// Generate type-level interrupt module
 #[macro_export]
 macro_rules! clic_interrupt_mod {
@@ -176,6 +195,17 @@ macro_rules! clic_bind_interrupts {
                 /// Initialize CLIC and fill the vector table (call BEFORE cache enable).
                 pub unsafe fn init_vector_table() {
                     unsafe {
+                        // 0. Run the whole bring-up with interrupts disabled.
+                        //
+                        // `mstatus.MIE` is inherited from whatever ran before
+                        // this image, and so is the CLIC's per-source enable
+                        // mask. Until `mtvt` points at the vector table below, a
+                        // source an earlier stage left enabled would be taken
+                        // through a stale `mtvt` and vector into the previous
+                        // image. Masking here closes that window; the final step
+                        // re-enables interrupts once the table is live.
+                        ::riscv::interrupt::disable();
+
                         // 1. Set mtvec (CLIC mode = 3, ensure address alignment)
                         unsafe extern "C" { fn AlignedTrapHandler(); }
                         let trap_addr = (AlignedTrapHandler as usize & !0x3) | 3;
@@ -183,6 +213,25 @@ macro_rules! clic_bind_interrupts {
 
                         // 2. Initialize CLIC hardware
                         $crate::interrupt::clic::clic_init();
+
+                        // 2b. Mask everything an earlier stage may have left
+                        // enabled (the BootROM and the PBPs share this CLIC) before
+                        // this image enables its own sources below.
+                        $crate::interrupt::clic::mask_all_interrupts();
+
+                        // 2c. Install `mtvt` *before* any source is enabled.
+                        //
+                        // `clic_init` above turned vector mode on, so the moment a
+                        // source is enabled and `mstatus.MIE` allows it, the CLIC
+                        // fetches the handler through `mtvt`. Programming `mtvt`
+                        // after `enable_interrupt` (the old order) left a window in
+                        // which a source inherited as pending - the USB controller
+                        // is mid-transfer while the loader takes over - vectored
+                        // through the *previous* image's table and jumped into
+                        // unrelated code. Interrupts are masked (step 0), so the
+                        // table may be filled after this point.
+                        let vt_addr = &VECTOR_TABLE as *const _ as usize;
+                        core::arch::asm!("csrw 0x307, {}", in(reg) vt_addr);
 
                         // 3. Fill all entries with the default handler
                         let default_addr = (__irq_handler_default as usize & !0x3) as u32;
@@ -198,16 +247,16 @@ macro_rules! clic_bind_interrupts {
 
                             $crate::interrupt::clic::set_priority(irq_num, 255);
                             $crate::interrupt::clic::set_interrupt_attribute(irq_num, true, 0, 0);
-                            $crate::interrupt::clic::enable_interrupt(irq_num);
                         )*
 
                         // 5. Ensure vector table writes are committed from store buffer to memory
                         core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
 
-                        let vt_addr = &VECTOR_TABLE as *const _ as usize;
-
-                        // 6. Write mtvt (cache not enabled yet, direct write to memory, no flush needed)
-                        core::arch::asm!("csrw 0x307, {}", in(reg) vt_addr);
+                        // 6. Now that the table is live, publish the sources.
+                        $(
+                            let irq_num = <$crate::interrupt::clic::typelevel::$irq as $crate::interrupt::clic::typelevel::Interrupt>::IRQ;
+                            $crate::interrupt::clic::enable_interrupt(irq_num);
+                        )*
 
                         // 7. Enable global interrupts
                         ::riscv::interrupt::enable();

@@ -532,6 +532,11 @@ pub enum CsSel {
     Cs1,
 }
 
+impl CsSel {
+    /// All chip selects.
+    pub const ALL: [Self; 2] = [Self::Cs0, Self::Cs1];
+}
+
 /// CS polarity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -1095,6 +1100,28 @@ pub enum PhaseSel {
     Deg337_5,
     /// BYPASS.
     Bypass,
+}
+
+impl PhaseSel {
+    /// All phases, in hardware order.
+    pub const ALL: [Self; 16] = [
+        Self::Deg22_5,
+        Self::Deg45,
+        Self::Deg67_5,
+        Self::Deg90,
+        Self::Deg112_5,
+        Self::Deg135,
+        Self::Deg157_5,
+        Self::Deg180,
+        Self::Deg202_5,
+        Self::Deg225,
+        Self::Deg247_5,
+        Self::Deg270,
+        Self::Deg292_5,
+        Self::Deg315,
+        Self::Deg337_5,
+        Self::Bypass,
+    ];
 }
 
 /// XSPI chip select dll control register.

@@ -1,0 +1,72 @@
+# The **bootloader's own** manifest: custom PBP + bootloader, no app.
+#
+#   cd examples/app/app-bootloader
+#   cargo run -p aicfwc -- --build --toml .
+#
+# -> target/riscv32imafc-unknown-none-elf/release/app-bootloader-out/app-bootloader.img
+
+[image]
+platform = "d13x"
+product = "general-board"
+version = "0.1.0"
+media = "spi-nor"
+media_dev_id = 0
+# Which app a normal boot runs. Empty boots the first partition after `bootloader`
+# holding a valid AIC image; set a name to pin one by its AIC header name.
+app = ""
+
+# Components: `image.updater.*` (downloaded to `ram` and `EXEC`ed by the host tool)
+# and `image.target.*` (burned to a partition). A `[[component]]` with both
+# `updater = true` and a `partition` expands to one of each. Every `pbp` here is
+# custom (`pbp-common`), pointed at a crate output `aicfwc` builds and converts.
+
+# PSRAM bring-up helper whose entry is return-capable: `EXEC`ed while the host's
+# downloader is alive, it brings PSRAM up and **returns**. The other slots use the
+# same file, where PSRAM is off and it boots the loader.
+[[component]]
+kind = "pbp"
+name = "psram"
+updater = true
+ram = 0x30044000
+attr = "required;run"
+build_package = "pbp-common"
+file = "../../../target/riscv32imafc-unknown-none-elf/release/pbp-common"
+filename = "usbupg-psram-init.aic"
+
+# The bootloader, once for both roles: `updater = true` makes it
+# `image.updater.bootloader`, `partition` makes the same payload the on-flash
+# `image.target.bootloader`.
+#
+# `pbp` boots the loader from the RAM container (`ram`) when one is there,
+# otherwise from flash offset 0, so a blank board and one left half-written by an
+# interrupted burn both work. `name` is the AIC header app name, which is how
+# `pbp-common` recognises the container in the RAM slot.
+[[component]]
+kind = "app"
+name = "bootloader"
+updater = true
+ram = 0x40100000
+attr = "required;run"
+partition = "bootloader"
+build_package = "app-bootloader"
+file = "../../../target/riscv32imafc-unknown-none-elf/release/app-bootloader"
+filename = "bootloader.aic"
+target_filename = "app-bootloader.aic"
+load_address = 0x406c0000
+entry_offset = 0x100
+pbp = "../../../target/riscv32imafc-unknown-none-elf/release/pbp-common"
+
+# Our own on-flash layout (NOT the vendor `partition.json`); `build.rs` turns it
+# into `storage::FLASH_LAYOUT` and the same data is reported through
+# `GET_PARTITION_TABLE`. `bootloader` must stay at 0x0: BootROM reads the
+# first-stage image there.
+
+[[partition]]
+name = "bootloader"
+offset = 0x000000
+size = 0x080000   # 512 KiB
+
+[[partition]]
+name = "app"
+offset = 0x080000
+size = 0x400000   # 4 MiB

@@ -34,6 +34,20 @@ pub(crate) extern "C" fn _disable_cache() {
     }
 }
 
+/// Clean + invalidate both caches.
+///
+/// Used by the D13x PBP entry between `pbp_main` and restoring the caller's
+/// `mhcr`: the run may have left dirty lines behind, and the caller resumes with
+/// its own cache configuration.
+#[cfg(not(feature = "d21x"))]
+#[unsafe(no_mangle)]
+pub(crate) extern "C" fn _flush_cache() {
+    unsafe {
+        dcache_ciall();
+        icache_iall();
+    }
+}
+
 #[cfg(any(
     feature = "d12x",
     feature = "d13x",
