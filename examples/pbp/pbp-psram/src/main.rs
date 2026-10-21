@@ -5,7 +5,7 @@ use artinchip_hal::gtc::CntFreq;
 use artinchip_hal::prelude::*;
 use artinchip_hal::uart::*;
 use artinchip_hal::xspi::{Chip, PsramModel, XspiExt};
-use artinchip_rt::{Peripherals, pbp_entry, prelude::*};
+use artinchip_rt::{Peripherals, default_clk_tree, pbp_entry, prelude::*};
 use log::{error, info};
 use panic_halt as _;
 
@@ -15,12 +15,14 @@ const PSRAM_WINDOW: usize = 8 * 1024 * 1024;
 #[pbp_entry]
 fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
     check_startup(&boot_param);
-
     let mut p = Peripherals::take();
+    let clocks = default_clk_tree();
+    clocks.configure_plls(&mut p.cmu);
 
     let tx = p.gpioa.pa0.into_uart0_tx();
     let rx = p.gpioa.pa1.into_uart0_rx();
-    let _uart0 = uart_logger_init(p.uart0, tx, rx, UartConfig::default(), &mut p.cmu).unwrap();
+    let _uart0 =
+        uart_logger_init(p.uart0, tx, rx, UartConfig::default(), &clocks, &mut p.cmu).unwrap();
 
     info!("Welcome to pbp psram example by artinchip-hal🦀!");
 

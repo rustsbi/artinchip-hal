@@ -44,7 +44,7 @@ pub struct CsConfig {
 impl Default for QspiConfig {
     fn default() -> Self {
         Self {
-            freq: Hertz(1_000_000),
+            freq: Hertz(10_000_000),
             mode: MODE_0,
             ctrl_mode: CtrlMode::Master,
             work_mode: WorkMode::Standard,
@@ -62,8 +62,7 @@ impl Default for QspiConfig {
 impl QspiConfig {
     pub fn nor_flash() -> Self {
         Self {
-            // TODO: higher frequency when pll clock configuration is supported.
-            freq: Hertz(10_000_000),
+            freq: Hertz(100_000_000),
             mode: MODE_0,
             ctrl_mode: CtrlMode::Master,
             work_mode: WorkMode::Standard,

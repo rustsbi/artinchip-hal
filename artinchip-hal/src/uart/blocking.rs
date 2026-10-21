@@ -5,7 +5,7 @@ use super::error::UartError;
 use super::instance::Uart;
 use super::pad::{Receive, Transmit, UartPad};
 use super::register::RegisterBlock;
-use crate::cmu::Cmu;
+use crate::cmu::{ClockTree, Cmu};
 use uart16550::TriggerLevel;
 
 /// Blocking serial communication interface.
@@ -19,47 +19,102 @@ where
     rx: RX,
 }
 
+/// Program the UART module clock from PLL_INT1 and return the baud divisor.
+pub(crate) fn configure_uart_clock<const I: u8>(
+    cmu: &mut Cmu,
+    clock_tree: &ClockTree,
+    baud: u32,
+) -> u16 {
+    let clk = cmu.register_block();
+    let uart_clk = match I {
+        0 => &clk.clock_uart0,
+        1 => &clk.clock_uart1,
+        2 => &clk.clock_uart2,
+        3 => &clk.clock_uart3,
+        4 => &clk.clock_uart4,
+        5 => &clk.clock_uart5,
+        6 => &clk.clock_uart6,
+        7 => &clk.clock_uart7,
+        _ => panic!("Invalid UART index"),
+    };
+
+    let (div, divisor) = select_uart_divider(clock_tree.pll_int1.0, baud)
+        .expect("UART baud rate cannot be generated");
+
+    unsafe {
+        uart_clk.modify(|v| v.set_module_clk_div(div).enable_module_clk());
+        uart_clk.modify(|v| v.enable_bus_clk());
+        uart_clk.modify(|v| v.enable_module_reset());
+        riscv::asm::delay(500);
+        uart_clk.modify(|v| v.disable_module_reset());
+    }
+    divisor
+}
+
+/// Select the module divider and UART baud divisor with the smallest error.
+fn select_uart_divider(pll_int1: u32, baud: u32) -> Option<(u8, u16)> {
+    // D13x UART module clock limit.
+    const MAX_MODULE_HZ: u32 = 60_000_000;
+    const MAX_MODULE_DIV: u8 = 0x1F;
+    const MAX_ERROR_PPM: u64 = 30_000;
+
+    if baud == 0 {
+        return None;
+    }
+
+    let mut best: Option<(u64, u32, u8, u16)> = None;
+
+    for div in 0..=MAX_MODULE_DIV {
+        let module = pll_int1 / (div as u32 + 1);
+        if module == 0 || module > MAX_MODULE_HZ {
+            continue;
+        }
+
+        let divisor = ((module as u64 + 8 * baud as u64) / (16 * baud as u64)) as u32;
+        if divisor == 0 || divisor > u16::MAX as u32 {
+            continue;
+        }
+
+        let actual = module / (16 * divisor);
+        let ppm = actual.abs_diff(baud) as u64 * 1_000_000 / baud as u64;
+        let candidate = (ppm, module, div, divisor as u16);
+
+        // On equal error prefer the lower module clock.
+        if best.is_none_or(|best| {
+            candidate.0 < best.0 || (candidate.0 == best.0 && candidate.1 < best.1)
+        }) {
+            best = Some(candidate);
+        }
+    }
+
+    best.filter(|(ppm, _, _, _)| *ppm <= MAX_ERROR_PPM)
+        .map(|(_, _, div, divisor)| (div, divisor))
+}
+
 impl<'a, const I: u8, TX, RX> BlockingSerial<'a, I, TX, RX>
 where
     TX: UartPad<I> + Transmit<I>,
     RX: UartPad<I> + Receive<I>,
 {
     /// Create a new blocking serial.
-    pub fn new(reg: &'a RegisterBlock, tx: TX, rx: RX, config: UartConfig, cmu: &mut Cmu) -> Self {
-        // Enable clocks for the UART instance
-        // TODO: flexible clock frequency handling
-        let fix_mod_clk_rate = 48_000_000;
-        let fix_mod_div = 24;
-        let clk = cmu.register_block();
-        let uart_clk = match I {
-            0 => &clk.clock_uart0,
-            1 => &clk.clock_uart1,
-            2 => &clk.clock_uart2,
-            3 => &clk.clock_uart3,
-            4 => &clk.clock_uart4,
-            5 => &clk.clock_uart5,
-            6 => &clk.clock_uart6,
-            7 => &clk.clock_uart7,
-            _ => panic!("Invalid UART index"),
-        };
-        unsafe {
-            // Initialize module clock.
-            // Reference: https://aicdoc.artinchip.com/topics/ic/cmu/cmu-function2-d13x.html#topic_yvp_f24_4bc__table_qb3_bn5_ydc
-            uart_clk.modify(|v| v.set_module_clk_div(fix_mod_div).enable_module_clk());
-            uart_clk.modify(|v| v.enable_bus_clk());
-            uart_clk.modify(|v| v.enable_module_reset());
-            riscv::asm::delay(500);
-            uart_clk.modify(|v| v.disable_module_reset());
-        }
-
+    pub fn new(
+        reg: &'a RegisterBlock,
+        tx: TX,
+        rx: RX,
+        config: UartConfig,
+        clock_tree: &ClockTree,
+        cmu: &mut Cmu,
+    ) -> Self {
         // Parse configuration
         let baud_rate = config.baud_rate.0;
         let data_bits = config.data_bits;
         let stop_bits = config.stop_bits;
         let parity = config.parity;
 
-        // Disable all interrupts
+        let uart_divisor = configure_uart_clock::<I>(cmu, clock_tree, baud_rate);
         let uart16550 = &reg.uart16550;
+
+        // Disable all interrupts
         let interrupt_types = uart16550.ier().read();
         uart16550.ier().write(
             interrupt_types
@@ -70,8 +125,7 @@ where
         );
 
         // Write baud rate divisor
-        let uart_divisor = fix_mod_clk_rate / (16 * baud_rate);
-        uart16550.write_divisor(uart_divisor as u16);
+        uart16550.write_divisor(uart_divisor);
 
         // Configure line control register
         let lcr = uart16550.lcr().read();

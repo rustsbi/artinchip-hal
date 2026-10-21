@@ -1,8 +1,21 @@
 //! ArtInChip D21x chip series (C906, RV64).
 
 use crate::gpio::PadExt as _;
+pub use artinchip_hal::cmu::ClockTree;
 use artinchip_hal::instances::*;
+use embedded_time::rate::Hertz;
 use paste::paste;
+
+/// Default D21x clock tree.
+pub const fn default_clk_tree() -> ClockTree {
+    ClockTree::new(
+        Hertz(600_000_000),
+        Hertz(1_200_000_000),
+        Hertz(1_008_000_000),
+        Some(Hertz(491_520_000)),
+        None,
+    )
+}
 
 /// ArtInChip D21x peripheral ownership structures.
 pub struct Peripherals {

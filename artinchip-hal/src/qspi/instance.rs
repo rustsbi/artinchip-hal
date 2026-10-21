@@ -5,7 +5,7 @@ use super::config::QspiConfig;
 use super::pad::*;
 use super::qspi_ext::QspiExt;
 use super::register::RegisterBlock;
-use crate::cmu::Cmu;
+use crate::cmu::{ClockTree, Cmu};
 use core::marker::PhantomData;
 
 /// QSPI with statically known instance number.
@@ -35,11 +35,12 @@ impl<const I: u8> QspiExt<'static, I> for Qspi<I> {
         self,
         pad: PAD,
         config: QspiConfig,
+        clock_tree: &ClockTree,
         cmu: &mut Cmu,
     ) -> BlockingQspi<'static, I, PAD>
     where
         PAD: QspiPads<I>,
     {
-        BlockingQspi::new(self.register_block(), pad, config, cmu)
+        BlockingQspi::new(self.register_block(), pad, config, clock_tree, cmu)
     }
 }

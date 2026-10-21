@@ -4,7 +4,7 @@
 use artinchip_hal::prelude::*;
 use artinchip_hal::pwm::*;
 use artinchip_hal::uart::*;
-use artinchip_rt::{Peripherals, pbp_entry, prelude::*};
+use artinchip_rt::{Peripherals, default_clk_tree, pbp_entry, prelude::*};
 use embedded_time::rate::Hertz;
 use log::info;
 use panic_halt as _;
@@ -13,10 +13,13 @@ use panic_halt as _;
 fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
     check_startup(&boot_param);
     let mut p = Peripherals::take();
+    let clocks = default_clk_tree();
+    clocks.configure_plls(&mut p.cmu);
+
     let tx = p.gpioa.pa0.into_uart0_tx();
     let rx = p.gpioa.pa1.into_uart0_rx();
 
-    let _uart0 = uart_logger_init(p.uart0, tx, rx, UartConfig::default(), &mut p.cmu);
+    let _uart0 = uart_logger_init(p.uart0, tx, rx, UartConfig::default(), &clocks, &mut p.cmu);
 
     info!("Welcome to pbp pwm example by artinchip-hal🦀!");
 
@@ -25,6 +28,7 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
     let mut pwm_ch3 = p.pwm.ch3.new_driver(
         (Some(pwm_pina), Some(pwm_pinb)),
         PwmConfig::default(),
+        &clocks,
         &mut p.cmu,
     );
     pwm_ch3.set_freq_and_ratio(Hertz::new(1_000), 40.0, 20.0);

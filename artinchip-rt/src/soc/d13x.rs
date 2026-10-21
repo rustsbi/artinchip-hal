@@ -1,8 +1,21 @@
 //! ArtInChip D13x chip series.
 
 use crate::gpio::PadExt as _;
+pub use artinchip_hal::cmu::ClockTree;
 use artinchip_hal::instances::*;
+use embedded_time::rate::Hertz;
 use paste::paste;
+
+/// Default D13x clock tree.
+pub const fn default_clk_tree() -> ClockTree {
+    ClockTree::new(
+        Hertz(480_000_000),
+        Hertz(1_200_000_000),
+        Hertz(800_000_000),
+        None,
+        None,
+    )
+}
 
 /// ArtInChip D13x peripheral ownership structures available on BootROM.
 pub struct Peripherals {

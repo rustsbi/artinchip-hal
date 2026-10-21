@@ -5,7 +5,7 @@ use super::driver::PwmChDriver;
 use super::pad::PwmPads;
 use super::pwm_ext::PwmExt;
 use super::register::RegisterBlock;
-use crate::cmu::Cmu;
+use crate::cmu::{ClockTree, Cmu};
 use core::marker::PhantomData;
 
 /// PWM channel instance.
@@ -34,12 +34,13 @@ impl<const I: u8> PwmExt<'static, I> for PwmChannel<I> {
         self,
         pad: PAD,
         config: PwmConfig,
+        clock_tree: &ClockTree,
         cmu: &mut Cmu,
     ) -> PwmChDriver<'static, I, PAD>
     where
         PAD: PwmPads<I>,
     {
-        PwmChDriver::__new(self.register_block(), pad, config, cmu)
+        PwmChDriver::__new(self.register_block(), pad, config, clock_tree, cmu)
     }
 }
 

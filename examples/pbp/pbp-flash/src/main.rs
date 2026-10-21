@@ -5,8 +5,7 @@ use artinchip_hal::gtc::*;
 use artinchip_hal::prelude::*;
 use artinchip_hal::qspi::*;
 use artinchip_hal::uart::*;
-use artinchip_rt::prelude::*;
-use artinchip_rt::{Peripherals, pbp_entry};
+use artinchip_rt::{Peripherals, default_clk_tree, pbp_entry, prelude::*};
 use embedded_io::Write;
 use log::{error, info};
 use panic_halt as _;
@@ -17,10 +16,13 @@ use w25qxxxjv::{Model, SpiSpeed, W25QXXXJV};
 fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
     check_startup(&boot_param);
     let mut p = Peripherals::take();
+    let clocks = default_clk_tree();
+    clocks.configure_plls(&mut p.cmu);
 
     let tx = p.gpioa.pa0.into_uart0_tx();
     let rx = p.gpioa.pa1.into_uart0_rx();
-    let mut uart0 = uart_logger_init(p.uart0, tx, rx, UartConfig::default(), &mut p.cmu).unwrap();
+    let mut uart0 =
+        uart_logger_init(p.uart0, tx, rx, UartConfig::default(), &clocks, &mut p.cmu).unwrap();
 
     let mut led = p.gpioa.pa5.into_pull_up_output();
     let mut delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &mut p.cmu);
@@ -43,7 +45,7 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
 
     let qspi0 = p
         .qspi0
-        .new_blocking(qspi0_pad, QspiConfig::nor_flash(), &mut p.cmu);
+        .new_blocking(qspi0_pad, QspiConfig::nor_flash(), &clocks, &mut p.cmu);
 
     info!("QSPI initialized");
 
@@ -93,7 +95,7 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
                 for j in 0..16 {
                     write!(uart0, "{:02X} ", read_buf[i * 16 + j]).ok();
                 }
-                writeln!(uart0, "").ok();
+                writeln!(uart0).ok();
             }
 
             // Check magic number
@@ -102,8 +104,8 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
                 Ok(_) => {
                     info!("Magic number1(expected: \"AIC \"):");
                     write!(uart0, "\"").ok();
-                    for i in 0..4 {
-                        write!(uart0, "{}", magic_num[i] as char).ok();
+                    for byte in magic_num {
+                        write!(uart0, "{}", byte as char).ok();
                     }
                     writeln!(uart0, "\"").ok();
                 }
@@ -115,8 +117,8 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
                 Ok(_) => {
                     info!("Magic number2(expected: \"PBP \"):");
                     write!(uart0, "\"").ok();
-                    for i in 0..4 {
-                        write!(uart0, "{}", magic_num[i] as char).ok();
+                    for byte in magic_num {
+                        write!(uart0, "{}", byte as char).ok();
                     }
                     writeln!(uart0, "\"").ok();
                 }

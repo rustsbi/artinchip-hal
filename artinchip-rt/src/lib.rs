@@ -22,10 +22,10 @@ pub mod prelude {
 }
 
 #[cfg(feature = "d13x")]
-pub use soc::d13x::Peripherals;
+pub use soc::d13x::{Peripherals, default_clk_tree};
 
 #[cfg(feature = "d21x")]
-pub use soc::d21x::Peripherals;
+pub use soc::d21x::{Peripherals, default_clk_tree};
 
 #[cfg(not(any(feature = "d13x", feature = "d21x")))]
 /// Mock peripheral struct for unselected chips.
