@@ -13,18 +13,17 @@ uart16550 = "0.0.1"
 embedded-hal = "1.0.0"
 embedded-time = "0.12.1"
 embedded-io = "0.7.1"
-embedded-io-async = "0.7.0"
+embedded-io-async = { version = "0.7.0", optional = true }
 riscv = { version = "0.16.1", features = ["critical-section-single-hart"] }
 critical-section = "1.2.0"
-embassy-sync = "0.8.0"
-paste = "1.0"
+embassy-sync = { version = "0.8.0", optional = true }
 xuantie-riscv = {git = "https://github.com/rustsbi/xuantie.git", branch = "main"}
 log = { version = "0.4", default-features = false }
 heapless = "0.9.3"
 
 [features]
 uart-logger = []
-clic-interrupts = []
+clic-interrupts = ["dep:embassy-sync", "dep:embedded-io-async"]
 d12x = []
 d13x = []
 d21x = []

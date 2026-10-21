@@ -10,19 +10,20 @@
 use artinchip_hal::gtc::CntFreq;
 use artinchip_hal::prelude::*;
 use artinchip_hal::uart::{UartConfig, uart_logger_init};
-use artinchip_rt::{Peripherals, app_entry, prelude::*};
+use artinchip_rt::{Peripherals, app_entry, default_clk_tree, prelude::*};
 use log::info;
 use panic_halt as _;
 
 #[app_entry("blinky")]
 fn app_main(_boot_param: BootParam, _private_data: &[u8]) {
     let mut p = Peripherals::take();
+    let clocks = default_clk_tree();
 
     // UART0 (PA0/PA1) so the app can say it was reached; the bootloader's logger
     // does not carry over between images.
     let tx = p.gpioa.pa0.into_uart0_tx();
     let rx = p.gpioa.pa1.into_uart0_rx();
-    let _uart0 = uart_logger_init(p.uart0, tx, rx, UartConfig::default(), &mut p.cmu).ok();
+    let _uart0 = uart_logger_init(p.uart0, tx, rx, UartConfig::default(), &clocks, &mut p.cmu).ok();
 
     let mut delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &mut p.cmu);
     let mut led = p.gpioe.pe17.into_pull_up_output();

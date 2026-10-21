@@ -5,7 +5,7 @@ use super::config::UartConfig;
 use super::pad::{Receive, Transmit, UartPad};
 use super::register::RegisterBlock;
 use super::uart_ext::UartExt;
-use crate::cmu::Cmu;
+use crate::cmu::{ClockTree, Cmu};
 use core::marker::PhantomData;
 #[cfg(feature = "clic-interrupts")]
 use {super::non_blocking::*, crate::interrupt::clic::typelevel};
@@ -82,13 +82,14 @@ impl<const I: u8> UartExt<'static, I> for Uart<I> {
         tx: TX,
         rx: RX,
         config: UartConfig,
+        clock_tree: &ClockTree,
         cmu: &mut Cmu,
     ) -> BlockingSerial<'static, I, TX, RX>
     where
         TX: UartPad<I> + Transmit<I>,
         RX: UartPad<I> + Receive<I>,
     {
-        BlockingSerial::new(self.register_block(), tx, rx, config, cmu)
+        BlockingSerial::new(self.register_block(), tx, rx, config, clock_tree, cmu)
     }
     #[cfg(feature = "clic-interrupts")]
     #[inline]
@@ -97,6 +98,7 @@ impl<const I: u8> UartExt<'static, I> for Uart<I> {
         tx: TX,
         rx: RX,
         config: UartConfig,
+        clock_tree: &ClockTree,
         cmu: &mut Cmu,
         _irqs: IRQS,
     ) -> AsyncSerial<'static, I, TX, RX>
@@ -112,6 +114,6 @@ impl<const I: u8> UartExt<'static, I> for Uart<I> {
                 AsyncUartHandler<I>,
             >,
     {
-        AsyncSerial::new(self.register_block(), tx, rx, config, cmu)
+        AsyncSerial::new(self.register_block(), tx, rx, config, clock_tree, cmu)
     }
 }

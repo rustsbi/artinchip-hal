@@ -2,7 +2,10 @@
 
 use core::fmt::Write as _;
 
-use crate::{cmu::Cmu, uart::*};
+use crate::{
+    cmu::{ClockTree, Cmu},
+    uart::*,
+};
 use heapless::String;
 use log::{LevelFilter, Log, Metadata, Record, SetLoggerError};
 
@@ -67,6 +70,7 @@ pub fn uart_logger_init<TX, RX, const I: u8>(
     tx: TX,
     rx: RX,
     config: UartConfig,
+    clock_tree: &ClockTree,
     cmu: &mut Cmu,
 ) -> Result<BlockingSerial<'static, I, TX, RX>, SetLoggerError>
 where
@@ -77,7 +81,7 @@ where
     let reg_ptr: *const RegisterBlock = uart.register_block() as *const RegisterBlock;
 
     // `new_blocking` handles all hardware initialization.
-    let serial = uart.new_blocking(tx, rx, config, cmu);
+    let serial = uart.new_blocking(tx, rx, config, clock_tree, cmu);
 
     unsafe {
         REG = reg_ptr;

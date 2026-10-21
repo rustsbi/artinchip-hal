@@ -44,7 +44,7 @@ impl Default for PwmConfig {
             duty_b: Nanoseconds(500_000),
             period: Nanoseconds(1_000_000),
             cnt_mode: CntMode::CountUp,
-            tb_clk_rate: Hertz(24_000_000),
+            tb_clk_rate: Hertz(60_000_000),
             init_level: InitLevel::High,
             action_0: Some(Action {
                 cbd: ActionMode::NoOp,

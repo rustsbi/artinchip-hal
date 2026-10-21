@@ -3,7 +3,7 @@
 use super::blocking::BlockingQspi;
 use super::config::QspiConfig;
 use super::pad::*;
-use crate::cmu::Cmu;
+use crate::cmu::{ClockTree, Cmu};
 
 pub trait QspiExt<'a, const I: u8> {
     /// Creates a blocking QSPI interface with the specified pads.
@@ -11,6 +11,7 @@ pub trait QspiExt<'a, const I: u8> {
         self,
         pad: PAD,
         config: QspiConfig,
+        clock_tree: &ClockTree,
         cmu: &mut Cmu,
     ) -> BlockingQspi<'a, I, PAD>
     where

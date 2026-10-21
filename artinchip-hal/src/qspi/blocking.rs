@@ -9,7 +9,7 @@ use super::error::QspiError;
 use super::instance::Qspi;
 use super::pad::*;
 use super::register::*;
-use crate::cmu::Cmu;
+use crate::cmu::{ClockTree, Cmu};
 use embedded_hal::spi::{MODE_1, MODE_3, Operation};
 
 pub struct BlockingQspi<'a, const I: u8, PAD>
@@ -22,6 +22,7 @@ where
 }
 
 /// QSPI internal clock divider selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DividerSelect {
     /// CDR1 mode: sclk >> div.
     Cdr1(u8),
@@ -33,15 +34,20 @@ impl<'a, const I: u8, PAD> BlockingQspi<'a, I, PAD>
 where
     PAD: QspiPads<I>,
 {
-    const MAX_HZ: u32 = 133_000_000;
-    const MIN_HZ: u32 = 3_000;
+    const MAX_HZ: u32 = 100_000_000;
+    const MIN_HZ: u32 = 100_000;
     const DEFAULT_TX_WATERMARK: u8 = 32;
     const DEFAULT_RX_WATERMARK: u8 = 32;
-    const PLL_FRA0_FREQ: u32 = 768_000_000;
     const FIFO_DEPTH: u8 = 64;
 
     /// Create a new blocking QSPI interface.
-    pub fn new(reg: &'a RegisterBlock, pad: PAD, config: QspiConfig, cmu: &mut Cmu) -> Self {
+    pub fn new(
+        reg: &'a RegisterBlock,
+        pad: PAD,
+        config: QspiConfig,
+        clock_tree: &ClockTree,
+        cmu: &mut Cmu,
+    ) -> Self {
         if config.mode == MODE_1 || config.mode == MODE_3 {
             panic!("QSPI only supports SPI modes 0 and 2");
         }
@@ -56,25 +62,11 @@ where
         };
 
         let target_freq = config.freq.0.clamp(Self::MIN_HZ, Self::MAX_HZ);
-        let pll_fra0_freq = Self::PLL_FRA0_FREQ;
+        let pll_fra0_freq = clock_tree.pll_fra0.0;
 
-        // Calculate module clock divider from PLL_FRA0.
-        // Formula: module_clk = PLL_FRA0 / (mod_div + 1).
-        // Strategy: Use appropriate module clock for different frequency ranges.
-        let mod_div = if target_freq < 1_000_000 {
-            15 // 768MHz / 16 = 48MHz.
-        } else if target_freq < 10_000_000 {
-            7 // 768MHz / 8 = 96MHz.
-        } else if target_freq < 50_000_000 {
-            3 // 768MHz / 4 = 192MHz.
-        } else {
-            0 // 768MHz / 1 = 768MHz.
-        };
-
-        let actual_module_clk = pll_fra0_freq / (mod_div as u32 + 1);
-
-        // Calculate internal QSPI divider to reach target frequency.
-        let divider = Self::calculate_best_divider(actual_module_clk, target_freq);
+        // Search the module divider and internal divider together so the
+        // selected SCK is as close as possible to the requested frequency.
+        let (mod_div, divider) = Self::select_clock(pll_fra0_freq, target_freq);
 
         unsafe {
             // Configure and enable module clock.
@@ -320,73 +312,48 @@ where
         Ok(())
     }
 
-    /// Calculate the best internal clock divider to achieve target frequency.
-    /// - CDR1: SPI_CLK = sclk / (2^cdr1).
-    /// - CDR2: SPI_CLK = sclk / (2 * (cdr2 + 1)).
-    fn calculate_best_divider(sclk: u32, bus_hz: u32) -> DividerSelect {
-        // Calculate best CDR1 divider.
-        // Formula: SPI_CLK = sclk / (2^cdr1).
-        let mut cdr1 = 0u8;
-        while (sclk >> cdr1) > bus_hz && cdr1 < 0xF {
-            cdr1 += 1;
-        }
-        cdr1 = cdr1.min(0xF);
+    /// Select the module and internal dividers with the smallest frequency
+    /// error. Ties prefer a clock at or below the requested frequency.
+    fn select_clock(pll_fra0: u32, target: u32) -> (u8, DividerSelect) {
+        let mut best_error = u32::MAX;
+        let mut best_over = true;
+        let mut best_mod_div = 0;
+        let mut best_divider = DividerSelect::Cdr1(0);
 
-        // Refine cdr1: check if (cdr1-1) produces closer frequency.
-        if cdr1 > 0 && (sclk >> cdr1) < bus_hz {
-            let cdr1_clk = sclk >> cdr1;
-            let cdr1_clkt = sclk >> (cdr1 - 1);
-            if (cdr1_clkt - bus_hz) < (bus_hz - cdr1_clk) {
-                cdr1 -= 1;
+        // CDR1: SCK = module / 2^cdr1.
+        // CDR2: SCK = module / (2 * (cdr2 + 1)).
+        for mod_div in 0..=0x1F {
+            let module = pll_fra0 / (mod_div as u32 + 1);
+            if module == 0 || module > Self::MAX_HZ {
+                continue;
+            }
+
+            for cdr1 in 0..=0xF {
+                let actual = module >> cdr1;
+                let error = actual.abs_diff(target);
+                let over = actual > target;
+                if error < best_error || (error == best_error && !over && best_over) {
+                    best_error = error;
+                    best_over = over;
+                    best_mod_div = mod_div;
+                    best_divider = DividerSelect::Cdr1(cdr1);
+                }
+            }
+
+            for cdr2 in 0..=0xFF {
+                let actual = module / (2 * (cdr2 as u32 + 1));
+                let error = actual.abs_diff(target);
+                let over = actual > target;
+                if error < best_error || (error == best_error && !over && best_over) {
+                    best_error = error;
+                    best_over = over;
+                    best_mod_div = mod_div;
+                    best_divider = DividerSelect::Cdr2(cdr2);
+                }
             }
         }
 
-        // Calculate best CDR2 divider.
-        // Formula: SPI_CLK = sclk / (2 * (cdr2 + 1)).
-        let mut cdr2 = if bus_hz > 0 {
-            let divisor = 2u32.saturating_mul(bus_hz);
-            sclk.checked_div(divisor)
-                .unwrap_or(0xFF)
-                .saturating_sub(1)
-                .min(0xFF) as u8
-        } else {
-            0xFF
-        };
-
-        // Refine cdr2: check if (cdr2+1) produces closer frequency.
-        let cdr2_clk = sclk / (2 * cdr2 as u32 + 1);
-        if cdr2 < 0xFF && cdr2_clk > bus_hz {
-            let cdr2_clkt = sclk / (2 * (cdr2 as u32 + 1) + 1);
-            if (bus_hz - cdr2_clkt) < (cdr2_clk - bus_hz) {
-                cdr2 += 1;
-            }
-        }
-
-        // Recalculate final frequencies.
-        let cdr1_clk = sclk >> cdr1;
-        let cdr2_clk = sclk / (2 * cdr2 as u32 + 1);
-
-        // Priority: exact match > closest below target > closest above target.
-        if cdr1_clk == bus_hz {
-            return DividerSelect::Cdr1(cdr1);
-        } else if cdr2_clk == bus_hz {
-            return DividerSelect::Cdr2(cdr2);
-        }
-
-        // Both frequencies are below target: use the higher one (closer to target).
-        if cdr2_clk < bus_hz && cdr1_clk < bus_hz {
-            if cdr2_clk > cdr1_clk {
-                return DividerSelect::Cdr2(cdr2);
-            }
-            return DividerSelect::Cdr1(cdr1);
-        }
-
-        // Mixed or both above target: use the lower frequency (safer for stability).
-        if cdr2_clk < cdr1_clk {
-            DividerSelect::Cdr2(cdr2)
-        } else {
-            DividerSelect::Cdr1(cdr1)
-        }
+        (best_mod_div, best_divider)
     }
 
     /// Free the blocking QSPI and return QSPI instance and all pads.

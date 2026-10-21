@@ -21,7 +21,7 @@ use artinchip_hal::qspi::*;
 use artinchip_hal::system::{self, Error as ImageError, ReadAt};
 use artinchip_hal::uart::*;
 use artinchip_hal::xspi::{Chip, PsramModel, Xspi, XspiExt};
-use artinchip_rt::{Peripherals, pbp_entry, prelude::*};
+use artinchip_rt::{Peripherals, default_clk_tree, pbp_entry, prelude::*};
 use embedded_hal::digital::OutputPin;
 use embedded_hal::spi::SpiBus;
 use log::{debug, error};
@@ -102,6 +102,8 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
     let upg = upg_requested(&boot_param);
 
     let mut p = Peripherals::take();
+    let clocks = default_clk_tree();
+    clocks.configure_plls(&mut p.cmu);
 
     // Which start this is: PSRAM already up, and is the ROM's downloader driving
     // us? Probed before `p.gtc` is moved out of `p`.
@@ -110,7 +112,8 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
 
     let tx = p.gpioa.pa0.into_uart0_tx();
     let rx = p.gpioa.pa1.into_uart0_rx();
-    let _uart0 = uart_logger_init(p.uart0, tx, rx, UartConfig::default(), &mut p.cmu).unwrap();
+    let _uart0 =
+        uart_logger_init(p.uart0, tx, rx, UartConfig::default(), &clocks, &mut p.cmu).unwrap();
 
     // Ask the hardware directly so a mis-decoded `boot_param` cannot break a burn:
     // `upg` and `from_host` must both agree no host is driving us. Acted on after
@@ -221,7 +224,7 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
     );
     let qspi0 = p
         .qspi0
-        .new_blocking(pad, QspiConfig::nor_flash(), &mut p.cmu);
+        .new_blocking(pad, QspiConfig::nor_flash(), &clocks, &mut p.cmu);
     let flash = match W25QXXXJV::new(qspi0, cs, SpiSpeed::Single, Model::Q128) {
         Ok(flash) => flash,
         Err(e) => {

@@ -8,11 +8,12 @@ use critical_section::Mutex;
 use embassy_sync::waitqueue::AtomicWaker;
 use uart16550::{PendingInterrupt, TriggerLevel};
 
+use super::blocking::configure_uart_clock;
 use super::config::{StopBits, UartConfig};
 use super::instance::{Uart, UartInterrupt};
 use super::pad::{Receive, Transmit, UartPad};
 use super::register::RegisterBlock;
-use crate::cmu::Cmu;
+use crate::cmu::{ClockTree, Cmu};
 use crate::interrupt::clic::typelevel::{self, Interrupt as _};
 use crate::types::RingBuffer;
 
@@ -177,39 +178,23 @@ where
     RX: UartPad<I> + Receive<I>,
     Uart<I>: UartInterrupt<I>,
 {
-    pub fn new(reg: &'a RegisterBlock, tx: TX, rx: RX, config: UartConfig, cmu: &mut Cmu) -> Self {
-        // Enable clocks for the UART instance
-        let fix_mod_clk_rate = 48_000_000;
-        let fix_mod_div = 24;
-        let clk = cmu.register_block();
-        let uart_clk = match I {
-            0 => &clk.clock_uart0,
-            1 => &clk.clock_uart1,
-            2 => &clk.clock_uart2,
-            3 => &clk.clock_uart3,
-            4 => &clk.clock_uart4,
-            5 => &clk.clock_uart5,
-            6 => &clk.clock_uart6,
-            7 => &clk.clock_uart7,
-            _ => panic!("Invalid UART index"),
-        };
-        unsafe {
-            // Initialize module clock
-            uart_clk.modify(|v| v.set_module_clk_div(fix_mod_div).enable_module_clk());
-            uart_clk.modify(|v| v.enable_bus_clk());
-            uart_clk.modify(|v| v.enable_module_reset());
-            riscv::asm::delay(500);
-            uart_clk.modify(|v| v.disable_module_reset());
-        }
-
-        // Parse configuration
+    pub fn new(
+        reg: &'a RegisterBlock,
+        tx: TX,
+        rx: RX,
+        config: UartConfig,
+        clock_tree: &ClockTree,
+        cmu: &mut Cmu,
+    ) -> Self {
         let baud_rate = config.baud_rate.0;
         let data_bits = config.data_bits;
         let stop_bits = config.stop_bits;
         let parity = config.parity;
 
-        // Disable all interrupts
+        let uart_divisor = configure_uart_clock::<I>(cmu, clock_tree, baud_rate);
         let uart16550 = &reg.uart16550;
+
+        // Disable all interrupts
         let interrupt_types = uart16550.ier().read();
         uart16550.ier().write(
             interrupt_types
@@ -220,8 +205,7 @@ where
         );
 
         // Write baud rate divisor
-        let uart_divisor = fix_mod_clk_rate / (16 * baud_rate);
-        uart16550.write_divisor(uart_divisor as u16);
+        uart16550.write_divisor(uart_divisor);
 
         // Configure line control register
         let lcr = uart16550.lcr().read();

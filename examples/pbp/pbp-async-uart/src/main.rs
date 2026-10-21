@@ -5,7 +5,7 @@
 use artinchip_hal::clic_bind_interrupts;
 use artinchip_hal::prelude::*;
 use artinchip_hal::uart::*;
-use artinchip_rt::{Peripherals, pbp_entry, prelude::*};
+use artinchip_rt::{Peripherals, default_clk_tree, pbp_entry, prelude::*};
 use core::fmt::Write as _;
 use embassy_futures::block_on;
 use embedded_io_async::Read as _;
@@ -45,19 +45,27 @@ das Vergissmeinnicht, das du mir gegeben hast, ist hier"#;
 fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
     check_startup(&boot_param);
     let mut p = Peripherals::take();
+    let clocks = default_clk_tree();
+    clocks.configure_plls(&mut p.cmu);
 
     let uart0_tx = p.gpioa.pa0.into_uart0_tx();
     let uart0_rx = p.gpioa.pa1.into_uart0_rx();
     let uart3_tx = p.gpioa.pa6.into_uart3_tx();
     let uart3_rx = p.gpioa.pa7.into_uart3_rx();
-    let mut uart3_async =
-        p.uart3
-            .new_async(uart3_tx, uart3_rx, UartConfig::default(), &mut p.cmu, Irqs);
+    let mut uart3_async = p.uart3.new_async(
+        uart3_tx,
+        uart3_rx,
+        UartConfig::default(),
+        &clocks,
+        &mut p.cmu,
+        Irqs,
+    );
     let _uart0 = uart_logger_init(
         p.uart0,
         uart0_tx,
         uart0_rx,
         UartConfig::default(),
+        &clocks,
         &mut p.cmu,
     )
     .unwrap();

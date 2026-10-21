@@ -4,7 +4,7 @@ use super::blocking::BlockingSerial;
 use super::config::UartConfig;
 use super::pad::UartPad;
 use super::pad::{Receive, Transmit};
-use crate::cmu::Cmu;
+use crate::cmu::{ClockTree, Cmu};
 #[cfg(feature = "clic-interrupts")]
 use {super::instance::*, super::non_blocking::*, crate::interrupt::clic::typelevel};
 
@@ -15,6 +15,7 @@ pub trait UartExt<'a, const I: u8> {
         tx: TX,
         rx: RX,
         config: UartConfig,
+        clock_tree: &ClockTree,
         cmu: &mut Cmu,
     ) -> BlockingSerial<'a, I, TX, RX>
     where
@@ -27,6 +28,7 @@ pub trait UartExt<'a, const I: u8> {
         tx: TX,
         rx: RX,
         config: UartConfig,
+        clock_tree: &ClockTree,
         cmu: &mut Cmu,
         _irqs: IRQS,
     ) -> AsyncSerial<'a, I, TX, RX>

@@ -16,7 +16,7 @@ use artinchip_hal::usbdrd::{
     AsyncUpgHandler, Engine, NorFlash, NorStorage, SECTOR_SIZE, Storage as _, UsbDevExt as _,
 };
 use artinchip_hal::wdog::{Wdog, WdogExt as _};
-use artinchip_rt::{Peripherals, app_entry, prelude::*};
+use artinchip_rt::{Peripherals, app_entry, default_clk_tree, prelude::*};
 use embassy_futures::block_on;
 use log::debug;
 use w25qxxxjv::{Model, SpiSpeed, W25QXXXJV};
@@ -156,6 +156,7 @@ fn app_main(_boot_param: BootParam, _private_data: &[u8]) {
     // earlier by `pbp-common`'s `upg_requested`, which can tell a host-driven start
     // apart from a flash one (this image cannot: `_start` clobbers `a0`).
     let mut p = Peripherals::take();
+    let clocks = default_clk_tree();
 
     // A second stage still needs its own console: the first stage's logger lives
     // in a different image. UART0 (PA0/PA1), 115200 8N1.
@@ -168,6 +169,7 @@ fn app_main(_boot_param: BootParam, _private_data: &[u8]) {
         uart0_tx,
         uart0_rx,
         UartConfig::default(),
+        &clocks,
         &mut p.cmu,
     )
     .ok();
@@ -196,7 +198,7 @@ fn app_main(_boot_param: BootParam, _private_data: &[u8]) {
     );
     let qspi0 = p
         .qspi0
-        .new_blocking(pad, QspiConfig::nor_flash(), &mut p.cmu);
+        .new_blocking(pad, QspiConfig::nor_flash(), &clocks, &mut p.cmu);
     let delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &mut p.cmu);
     // Second handle to the same counter, kept for the `Boot` role's host-wait
     // window while `delay` itself goes to the NOR driver.
