@@ -1,4 +1,4 @@
-//! I2C extension traits.
+//! QSPI extension traits.
 
 use super::blocking::BlockingQspi;
 use super::config::QspiConfig;

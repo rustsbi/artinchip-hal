@@ -60,7 +60,8 @@ impl Default for QspiConfig {
 }
 
 impl QspiConfig {
-    pub fn nor_flash() -> Self {
+    /// Controller configuration for a single-line SPI-NOR bus.
+    pub const fn nor_flash() -> Self {
         Self {
             freq: Hertz(100_000_000),
             mode: MODE_0,
@@ -70,5 +71,10 @@ impl QspiConfig {
             bit_mode_en: false,
             cs_config: None,
         }
+    }
+
+    /// Controller configuration for a single-line SPI-NAND bus.
+    pub const fn nand_flash() -> Self {
+        Self::nor_flash()
     }
 }

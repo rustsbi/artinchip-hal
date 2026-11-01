@@ -30,7 +30,7 @@ impl<const I: u8> Qspi<I> {
 }
 
 impl<const I: u8> QspiExt<'static, I> for Qspi<I> {
-    /// Creates a blocking Q interface with the specified pads.
+    /// Creates a blocking QSPI interface with the specified pads.
     fn new_blocking<PAD>(
         self,
         pad: PAD,
