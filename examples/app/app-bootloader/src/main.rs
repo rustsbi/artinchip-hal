@@ -1,73 +1,139 @@
+//! Second-stage bootloader and `USBUPG` firmware upgrade agent.
 #![no_std]
 #![no_main]
-#![feature(abi_riscv_interrupt)]
 
+#[cfg(all(feature = "d13x", feature = "d21x"))]
+compile_error!("select exactly one chip feature: `d13x` or `d21x`");
+#[cfg(not(any(feature = "d13x", feature = "d21x")))]
+compile_error!("select a chip feature: `d13x` or `d21x`");
+
+#[cfg(feature = "d13x")]
+mod d13x;
+#[cfg(feature = "d21x")]
+mod d21x;
+mod layout;
 mod storage;
 
-use artinchip_hal::clic_bind_interrupts;
-use artinchip_hal::cmu::Cmu;
-use artinchip_hal::gtc::*;
-use artinchip_hal::prelude::NoPad;
-use artinchip_hal::qspi::*;
+use core::cell::Cell;
+use core::convert::Infallible;
+
+use artinchip_hal::aic_upg::{AicUpgBuffers, AicUpgUsb, Engine, StorageBackend};
+use artinchip_hal::bind_interrupts;
+use artinchip_hal::cmu::{ClockTree, Cmu};
+#[cfg(feature = "dma")]
+use artinchip_hal::dma::Dma;
+use artinchip_hal::gtc::{CntFreq, GtcExt as _, TimerDelay};
+use artinchip_hal::interrupt::InterruptSource as _;
+use artinchip_hal::interrupt::typelevel::USB_DEV;
+use artinchip_hal::qspi::{Qspi, QspiConfig, QuadSpiBus};
+use artinchip_hal::sys_cfg::SocSysCfg;
 use artinchip_hal::system::{self, Error as ImageError, ReadAt, Role};
 use artinchip_hal::uart::{UartConfig, uart_logger_init};
-use artinchip_hal::usbdrd::UsbConfig;
-use artinchip_hal::usbdrd::{
-    AsyncUpgHandler, Engine, NorFlash, NorStorage, SECTOR_SIZE, Storage as _, UsbDevExt as _,
-};
+use artinchip_hal::usbdrd::device::{UsbDev, UsbDevInterrupt};
+use artinchip_hal::usbdrd::{UsbConfig, UsbPads};
 use artinchip_hal::wdog::{Wdog, WdogExt as _};
-use artinchip_rt::{Peripherals, app_entry, default_clk_tree, prelude::*};
+use artinchip_rt::sync::StaticSlot;
+use artinchip_rt::{Peripherals, boot_entry, default_clk_tree, prelude::*};
 use embassy_futures::block_on;
-use log::debug;
-use w25qxxxjv::{Model, SpiSpeed, W25QXXXJV};
+use embedded_hal::digital::OutputPin;
+use log::{debug, error};
 
-use storage::{BOOT_APP, FLASH_LAYOUT, NorFlashDelay, PARTITION_TABLE};
+#[cfg(feature = "d13x")]
+use artinchip_rt::soc::d13x::GpioBPads;
+#[cfg(feature = "d21x")]
+use artinchip_rt::soc::d21x::GpioBPads;
+#[cfg(feature = "d13x")]
+use d13x::Board;
+#[cfg(feature = "d21x")]
+use d21x::Board;
 
-// Bind the USB device interrupt; the vector table is filled in by the reset code.
-clic_bind_interrupts!(struct Irqs {
-    USB_DEV => AsyncUpgHandler;
+use layout::{BOOT_APP, FLASH_LAYOUT, PARTITION_TABLE};
+
+bind_interrupts!(struct Irqs {
+    USB_DEV => UsbDevInterrupt;
 });
 
-/// Report panics over UART: a silent halt would make a failed `.unwrap()`
-/// indistinguishable from a hang, which this example needs to see.
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
-    debug!("app-bootloader: PANIC: {panic_info}");
-    loop {
-        core::hint::spin_loop();
-    }
+    error!("app-bootloader: PANIC: {panic_info}");
+    system::halt()
 }
 
+/// Host-visible staging buffer size (`GET_MEM_BUF` / `WRITE`).
 const SCRATCH_SIZE: usize = 4 * 1024;
 
-/// Partition the bootloader itself lives in (`[[partition]]` in the manifest).
-/// Auto-boot starts *after* this one, so layout order decides what runs next.
+/// Partition containing the bootloader itself (`[[partition]]` in `boards/*.toml`).
 const BOOTLOADER_PARTITION: &str = "bootloader";
 
-/// GTC ticks per millisecond. The counter base is exactly 4 MHz (`GTC_CNTFID0` is
-/// hardwired to `0x003D0900` for a 24 MHz `PCLK`), so 4000 ticks = 1 ms.
+/// GTC ticks per millisecond at `CntFreq::Freq4M`.
 const TICKS_PER_MS: u64 = 4_000;
 
-/// How long either role listens for a host before booting the application.
-///
-/// The `Upgrade` role drops this deadline for good once a real upgrade command
-/// arrives, so a started burn runs to its `reset`; the window only covers a host
-/// that re-enumerated us and then went quiet. Must stay below AiBurn's ~10-12 s.
-const HOST_DELAY_MS: u32 = 300;
-
-/// Cache-line-aligned DMA buffer: the controller DMAs whole lines, so a buffer
-/// sharing one with unrelated data would discard it on invalidate. 64 bytes
-/// covers both the D13x (32) and D21x (64) lines.
+/// Cache-line-aligned DMA/staging buffer (64 bytes covers both D13x and D21x).
 #[repr(align(64))]
-struct DmaBuf<const N: usize>([u8; N]);
+pub(crate) struct DmaBuf<const N: usize>(pub(crate) [u8; N]);
 
-static mut SECTOR_BUF: DmaBuf<SECTOR_SIZE> = DmaBuf([0; SECTOR_SIZE]);
-static mut SCRATCH: DmaBuf<SCRATCH_SIZE> = DmaBuf([0; SCRATCH_SIZE]);
+static SCRATCH: StaticSlot<DmaBuf<SCRATCH_SIZE>> = StaticSlot::new(DmaBuf([0; SCRATCH_SIZE]));
+static UPG_BUFFERS: StaticSlot<AicUpgBuffers> = StaticSlot::new(AicUpgBuffers::new());
 
-/// [`ReadAt`] adapter over the upgrade storage, used to resolve the app image.
-struct StorageRead<'a, F: NorFlash>(&'a mut NorStorage<F>);
+/// Session deadline policy for the USB upgrade loop.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostPolicy {
+    /// Wait up to `ms` milliseconds for a host upgrade command, then try booting flash.
+    Window { ms: u32 },
+    /// Serve the host indefinitely with no timeout.
+    Unbounded,
+}
 
-impl<F: NorFlash> ReadAt for StorageRead<'_, F> {
+/// BootROM arguments forwarded to the booted application in `a0`/`a1`/`a2`.
+#[derive(Clone, Copy)]
+pub struct AppArguments<'a> {
+    pub boot_param: BootParam,
+    pub private: &'a [u8],
+}
+
+/// Hardware and storage handles passed to [`upgrade_role`].
+pub struct UpgradeContext<'a, St: StorageBackend, PAD: UsbPads<0> + 'static> {
+    pub storage: &'a mut St,
+    pub usb: UsbDev,
+    pub pads: PAD,
+    pub tick: TimerDelay<'static>,
+    pub cmu: &'a mut Cmu,
+    pub syscfg: &'a mut SocSysCfg,
+    pub wdog: Wdog,
+}
+
+/// Chip-specific QSPI bus/pin mapping and USB hand-over hooks.
+pub trait BootChip {
+    /// QSPI bus built by the chip module, including any DMA wrapper.
+    type Bus: QuadSpiBus + 'static;
+    /// Chip-select pin driven by the flash driver.
+    type Cs: OutputPin<Error = Infallible> + 'static;
+
+    const HOST_POLICY: HostPolicy;
+
+    fn init_bus(
+        qspi0: Qspi<0>,
+        gpiob: GpioBPads,
+        #[cfg(feature = "dma")] dma: Dma,
+        clocks: &ClockTree,
+        cmu: &mut Cmu,
+        config: QspiConfig,
+    ) -> (Self::Bus, Self::Cs);
+
+    fn before_usb(usb: &mut UsbDev, cmu: &mut Cmu) {
+        let _ = (usb, cmu);
+    }
+
+    fn app_args(boot_param: BootParam, private: &[u8]) -> AppArguments<'_>;
+}
+
+/// Media storage type for chip `C`; `nor` / `nand` decides the flash driver.
+pub type BoardStorage<C> = storage::Storage<<C as BootChip>::Bus, <C as BootChip>::Cs>;
+
+/// [`ReadAt`] adapter over [`StorageBackend`].
+struct StorageRead<'a>(&'a mut dyn StorageBackend);
+
+impl ReadAt for StorageRead<'_> {
     fn read_at(&mut self, offset: u32, buf: &mut [u8]) -> Result<(), ImageError> {
         if self.0.read(offset as u64, buf) == buf.len() {
             Ok(())
@@ -77,18 +143,11 @@ impl<F: NorFlash> ReadAt for StorageRead<'_, F> {
     }
 }
 
-/// Boot an application, if there is one.
+/// Boot an application, if one is present after the bootloader partition.
 ///
-/// With `[image] app` named, the image whose AIC header carries that name over the
-/// partitions after the bootloader's; empty (the default) boots the **first**
-/// such partition holding a valid `"AIC "` image, which the manifest's layout
-/// order makes "whatever comes next".
-///
-/// Returns only when there is nothing bootable, so the caller stays in the USB
-/// upgrade loop and a missing or corrupt app stays recoverable.
-fn try_boot_app(src: &mut impl ReadAt) {
-    // The bootloader's own partition holds the running image plus the PBP, not an
-    // application, so it is skipped.
+/// With `app` named in the board preset, only that AIC image is accepted;
+/// otherwise the first valid image after the bootloader wins.
+fn find_boot_app(src: &mut impl ReadAt) -> Option<system::Loader> {
     let candidates = FLASH_LAYOUT
         .iter()
         .skip_while(|partition| partition.name != BOOTLOADER_PARTITION)
@@ -109,61 +168,159 @@ fn try_boot_app(src: &mut impl ReadAt) {
             );
             continue;
         }
-        if let Err(err) = system::load(src, &loader) {
-            debug!("app-bootloader: app copy failed: {err:?}, staying in upgrade mode");
-            return;
-        }
-        unsafe { dcache_clean_invalidate_range(loader.dst as usize, loader.length as usize) };
-        debug!(
-            "app-bootloader: booting app {:?} @ {:#x}",
-            loader.name().unwrap_or("<unnamed>"),
-            loader.entry
-        );
-        unsafe { system::jump_to(loader.entry) }
+        return Some(loader);
     }
 
     if BOOT_APP.is_empty() {
-        debug!("app-bootloader: no bootable app image, staying in upgrade mode");
+        debug!("app-bootloader: No bootable app image, staying in upgrade mode");
     } else {
-        debug!("app-bootloader: no app named {BOOT_APP:?}, staying in upgrade mode");
+        debug!("app-bootloader: No app named {BOOT_APP:?}, staying in upgrade mode");
+    }
+    None
+}
+
+/// Copy `loader` into RAM, flush caches, and jump to its entry point.
+///
+/// # Safety
+/// `loader` must describe a valid AIC payload targeting writable, executable RAM.
+unsafe fn boot_app(src: &mut impl ReadAt, loader: &system::Loader, args: AppArguments<'_>) -> ! {
+    if let Err(err) = system::load(src, loader) {
+        error!("app-bootloader: App copy failed: {err:?}, halting");
+        system::halt();
+    }
+    unsafe { dcache_clean_invalidate_range(loader.dst as usize, loader.length as usize) };
+    debug!(
+        "app-bootloader: Booting app {:?} @ {:#x}",
+        loader.name().unwrap_or("<unnamed>"),
+        loader.entry
+    );
+    let (private_addr, private_len) = if args.private.is_empty() {
+        (core::ptr::null(), 0)
+    } else {
+        (args.private.as_ptr(), args.private.len() as u32)
+    };
+    unsafe {
+        system::jump_to(
+            loader.entry,
+            args.boot_param.as_raw(),
+            private_addr,
+            private_len,
+        )
     }
 }
 
-/// Reset the chip for real.
-///
-/// AiBurn sends `reset` last, once the SPL (and app) are in flash. Jumping into
-/// the PSRAM copy would skip the chain flash now describes, so reset through the
-/// watchdog and come up through the BootROM - what the BOOT/RESET button does.
+pub fn boot_role<St: StorageBackend>(
+    storage: &mut St,
+    mut usb: UsbDev,
+    cmu: &mut Cmu,
+    args: AppArguments<'_>,
+) -> ! {
+    usb.release(cmu);
+
+    let loader = {
+        let mut src = StorageRead(storage);
+        find_boot_app(&mut src)
+    };
+    let Some(loader) = loader else {
+        error!("app-bootloader: No bootable app");
+        system::halt();
+    };
+    let mut src = StorageRead(storage);
+    unsafe { boot_app(&mut src, &loader, args) }
+}
+
+/// Reset the chip through the watchdog so the BootROM restarts the flash boot
+/// chain this session just wrote, rather than jumping into the old RAM copy.
 fn reset_board(wdog: Wdog, cmu: &mut Cmu) -> ! {
     let mut wdog = wdog.new_driver(cmu);
-    // CLR < IRQ < RST: `RST` is the threshold that resets the chip. Applying a
-    // scene also clears the counter, so the reset lands `rst_seconds` from now.
+    // CLR < IRQ < RST: RST is the threshold that resets the chip.
     wdog.configure_scene_and_apply(0, 0, 1, 2);
     loop {
         core::hint::spin_loop();
     }
 }
 
-#[app_entry("app-bootloader")]
-fn app_main(_boot_param: BootParam, _private_data: &[u8]) {
-    // Deliberately NOT calling `check_startup()`.
-    //
-    // This image is both the RAM payload the host `EXEC`s while the BOOT key is
-    // *held* and the flash-resident bootloader. `check_startup()` probes PA0 as the
-    // low-active key and, when low, jumps back into the BootROM upgrade entry -
-    // which while the key is held bounces the freshly downloaded loader back into
-    // the ROM, dropping it off the bus mid-burn. The key is handled one stage
-    // earlier by `pbp-common`'s `upg_requested`, which can tell a host-driven start
-    // apart from a flash one (this image cannot: `_start` clobbers `a0`).
+pub fn upgrade_role<C, PAD>(mut ctx: UpgradeContext<'_, BoardStorage<C>, PAD>) -> !
+where
+    C: BootChip,
+    PAD: UsbPads<0> + 'static,
+{
+    USB_DEV::disable();
+    C::before_usb(&mut ctx.usb, ctx.cmu);
+
+    let buffers = UPG_BUFFERS.take();
+    let usb_config = UsbConfig::default();
+    let mut upg = match AicUpgUsb::new(
+        ctx.usb, ctx.pads, usb_config, Irqs, buffers, ctx.cmu, ctx.syscfg,
+    ) {
+        Ok(upg) => upg,
+        Err(err) => {
+            error!("app-bootloader: USB controller init failed: {err:?}");
+            system::halt();
+        }
+    };
+
+    let mut engine = Engine::new(ctx.storage, PARTITION_TABLE);
+    match C::HOST_POLICY {
+        HostPolicy::Window { ms } => {
+            let deadline = ctx.tick.get_tick() + u64::from(ms) * TICKS_PER_MS;
+            let seen_host = Cell::new(false);
+            let tick = ctx.tick;
+            block_on(upg.run(&mut engine, |eng| {
+                if eng.host_upgrading() {
+                    seen_host.set(true);
+                }
+                !seen_host.get() && tick.get_tick() >= deadline
+            }));
+        }
+        HostPolicy::Unbounded => {
+            block_on(upg.run(&mut engine, |_| false));
+        }
+    }
+
+    let empty_args = AppArguments {
+        boot_param: BootParam::from_raw(0),
+        private: &[],
+    };
+
+    if engine.reset_requested() {
+        debug!("app-bootloader: Host asked to reset, resetting the board");
+        drop(engine);
+        upg.deinit(ctx.cmu);
+        reset_board(ctx.wdog, ctx.cmu);
+    }
+
+    if matches!(C::HOST_POLICY, HostPolicy::Window { .. }) {
+        drop(engine);
+        block_on(upg.disconnect());
+
+        let loader = {
+            let mut src = StorageRead(ctx.storage);
+            find_boot_app(&mut src)
+        };
+        if let Some(loader) = loader {
+            upg.deinit(ctx.cmu);
+            let mut src = StorageRead(ctx.storage);
+            unsafe { boot_app(&mut src, &loader, empty_args) }
+        }
+
+        debug!("app-bootloader: Nothing to boot, staying in upgrade mode");
+        let mut engine = Engine::new(ctx.storage, PARTITION_TABLE);
+        block_on(upg.run(&mut engine, |_| false));
+    }
+
+    debug!("app-bootloader: Upgrade session ended without reset, halting");
+    system::halt()
+}
+
+fn run<C: BootChip>(boot_param: BootParam, private_data: &[u8]) -> ! {
+    USB_DEV::disable();
+
     let mut p = Peripherals::take();
     let clocks = default_clk_tree();
 
-    // A second stage still needs its own console: the first stage's logger lives
-    // in a different image. UART0 (PA0/PA1), 115200 8N1.
     let uart0_tx = p.gpioa.pa0.into_uart0_tx();
     let uart0_rx = p.gpioa.pa1.into_uart0_rx();
-    // A failed `set_logger` must not kill the loader and cannot be reported (the
-    // panic handler logs through the same logger), so `.ok()`.
     let _uart0 = uart_logger_init(
         p.uart0,
         uart0_tx,
@@ -174,129 +331,48 @@ fn app_main(_boot_param: BootParam, _private_data: &[u8]) {
     )
     .ok();
 
-    let sector_buf = unsafe { &mut *core::ptr::addr_of_mut!(SECTOR_BUF) };
-    let scratch = unsafe { &mut *core::ptr::addr_of_mut!(SCRATCH) };
-
-    // QSPI0 on D13x: SCK PB4, MOSI PB5, MISO PB1, CS PB2.
-    //
-    // The stage before differs by role: as the flash-resident SPL `pbp-common`
-    // configured QSPI0, but as the RAM updater the vendor PBP reports the USB boot
-    // device and never touches the NOR. So initialize here rather than attach: a
-    // controller left by someone else cannot be validated, and a wrong config
-    // fails silently in the NOR ID read.
-    let sck = p.gpiob.pb4.into_qspi0_sck();
-    let miso = p.gpiob.pb1.into_qspi0_miso();
-    let mosi = p.gpiob.pb5.into_qspi0_mosi();
-    let cs = p.gpiob.pb2.into_pull_up_output();
-    let pad = (
-        sck,
-        Some(mosi),
-        Some(miso),
-        None::<NoPad>,
-        None::<NoPad>,
-        None::<NoPad>,
+    let tick = p.gtc.new_timer_delay(CntFreq::Freq4M, &mut p.cmu);
+    let scratch = &mut SCRATCH.take().0;
+    let (bus, cs) = C::init_bus(
+        p.qspi0,
+        p.gpiob,
+        #[cfg(feature = "dma")]
+        p.dma,
+        &clocks,
+        &mut p.cmu,
+        storage::qspi_config(),
     );
-    let qspi0 = p
-        .qspi0
-        .new_blocking(pad, QspiConfig::nor_flash(), &clocks, &mut p.cmu);
-    let delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &mut p.cmu);
-    // Second handle to the same counter, kept for the `Boot` role's host-wait
-    // window while `delay` itself goes to the NOR driver.
-    let tick = delay;
-    let mut nor = match W25QXXXJV::new(qspi0, cs, SpiSpeed::Single, Model::Q128) {
-        Ok(flash) => flash,
-        Err(_) => {
-            debug!("app-bootloader: SPI-NOR init failed, halting");
-            loop {
-                core::hint::spin_loop();
-            }
-        }
-    };
-    // Prove the QSPI link works before touching the protocol. The IDs are folded
-    // into the one storage line below; a failure gets its own message there,
-    // because that is the only case where they are worth reading.
-    let id = nor.manufacture_device_id();
-    let uid = nor.read_unique_id();
+    let mut storage = storage::init(bus, cs, tick, boot_param, scratch);
 
-    let flash = NorFlashDelay::new(nor, delay);
-    let mut storage = NorStorage::new(flash, &mut sector_buf.0, &mut scratch.0, FLASH_LAYOUT);
+    let role = system::role();
+    debug!("app-bootloader: Role {role:?}");
 
-    let (scratch_addr, scratch_len, boot_stage) = (
-        storage.scratch_addr(),
-        storage.scratch_len(),
-        storage.boot_stage(),
-    );
-    match (id, uid) {
-        (Ok(id), Ok(uid)) => debug!(
-            "app-bootloader: SPI-NOR mfr=0x{:02x} dev=0x{:02x} uid=0x{:016x}, scratch={scratch_addr:#x} ({scratch_len} B), boot_stage={boot_stage}",
-            id[0], id[1], uid
-        ),
-        (id, uid) => {
-            if let Err(err) = id {
-                debug!("app-bootloader: SPI-NOR ID read failed: {err:?}");
-            }
-            if let Err(err) = uid {
-                debug!("app-bootloader: SPI-NOR UID read failed: {err:?}");
-            }
-            debug!(
-                "app-bootloader: scratch={scratch_addr:#x} ({scratch_len} B), boot_stage={boot_stage}"
-            );
-        }
+    if role == Role::Boot {
+        boot_role(
+            &mut storage,
+            p.usb_dev,
+            &mut p.cmu,
+            C::app_args(boot_param, private_data),
+        );
     }
-    let mut engine = Engine::new(&mut storage, PARTITION_TABLE);
 
     let dm = p.gpiou.pu0.into_usb0_dm();
     let dp = p.gpiou.pu1.into_usb0_dp();
-    let mut upg = match p.usb_dev.new_async_aic_upg(
-        (dm, dp),
-        UsbConfig::default(),
-        &mut p.cmu,
-        &mut p.syscfg,
-        Irqs,
-    ) {
-        Ok(upg) => upg,
-        Err(err) => {
-            debug!("app-bootloader: USB controller init FAILED: {:?}", err);
-            loop {
-                core::hint::spin_loop();
-            }
-        }
-    };
+    upgrade_role::<C, _>(UpgradeContext {
+        storage: &mut storage,
+        usb: p.usb_dev,
+        pads: (dm, dp),
+        tick,
+        cmu: &mut p.cmu,
+        syscfg: &mut p.syscfg,
+        wdog: p.wdog,
+    })
+}
 
-    // The role comes from the stage that started us (`system::Role`) and decides
-    // what happens when the window runs out. Both roles use the same window.
-    //
-    // * `Upgrade`: a host `EXEC`ed us; the clock stops for good once it sends a
-    //   state-changing command, while a mere probe keeps it running so an open tool
-    //   cannot pin the board here forever.
-    // * `Boot`: a flash start, so the deadline is **final** - a host that happens
-    //   to be attached must not keep the board in upgrade mode.
-    let role = system::role();
-    debug!("app-bootloader: role {role:?}");
-    let deadline = tick.get_tick() + HOST_DELAY_MS as u64 * TICKS_PER_MS;
-    if role == Role::Upgrade {
-        block_on(upg.run(&mut engine, |engine| {
-            !engine.host_upgrading() && tick.get_tick() >= deadline
-        }));
-
-        if engine.reset_requested() {
-            debug!("app-bootloader: host asked to reset, resetting the board");
-            reset_board(p.wdog, &mut p.cmu);
-        }
-    } else {
-        block_on(upg.run(&mut engine, |_| tick.get_tick() >= deadline));
-    }
-    debug!("app-bootloader: no host within {HOST_DELAY_MS} ms, normal boot");
-
-    // Nobody talked for the whole window: drop the USB pull-up so nothing keeps
-    // seeing an upgrade device that does not answer, then boot the application.
-    drop(engine);
-    upg.disconnect();
-    try_boot_app(&mut StorageRead(&mut storage));
-
-    // Nothing bootable: stay in the upgrade loop (no timeout) so the board can
-    // still be programmed over USB.
-    debug!("app-bootloader: nothing to boot, staying in upgrade mode");
-    let mut engine = Engine::new(&mut storage, PARTITION_TABLE);
-    block_on(upg.run(&mut engine, |_| false));
+#[boot_entry]
+fn app_main(boot_param: BootParam, private_data: &[u8]) -> ! {
+    // Deliberately skip `check_startup()`: PA0 is handled one stage earlier by
+    // `pbp-common`, whereas probing a held BOOT key here would bounce a host-driven
+    // RAM upgrade session back into the BootROM mid-burn.
+    run::<Board>(boot_param, private_data)
 }

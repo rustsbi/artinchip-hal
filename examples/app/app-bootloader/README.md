@@ -20,38 +20,38 @@ picks its path from it:
 
 ## Build
 
-From this directory, one command builds every package the manifest names and
-packs the image:
+The board presets in [`boards/`](../../../boards/README.md) describe the image;
+from the workspace root, one command builds every package it needs and packs it:
 
 ```bash
-cd examples/app/app-bootloader
-cargo run -p aicfwc -- --build --toml .
+# D13x / SPI-NOR
+cargo run -p aicfwc -- --board d13x-nor --bootloader --build
+
+# D21x / SPI-NAND
+cargo run -p aicfwc -- --board d21x-nand --bootloader --build
 ```
 
-Or from the workspace root, naming the directory instead of using `.`:
+`--bootloader` packages the boot chain alone — the PBP updaters plus this
+bootloader, no application; use `--app <package>` for a product image.
+`--build` runs one `cargo build` per package the image needs, in package order;
+`pbp-common` has to be built on its own invocation, which the per-package loop
+guarantees.
 
-```bash
-cargo run -p aicfwc -- --build --toml examples/app/app-bootloader
-```
-
-`--toml` takes a directory and picks its single manifest. `--build` runs one
-`cargo build` per component `build_package`, in manifest order; `pbp-common` has
-to be built on its own invocation, which the per-package loop guarantees.
-
-Output:
+Output (the image plus each piece it is made of):
 
 ```text
 target/riscv32imafc-unknown-none-elf/release/app-bootloader-out/app-bootloader.img
 ```
 
 The loader is linked as an AIC **loader** image: `load_address` / `entry_offset`
-and the on-flash layout come from `app-bootloader.toml`, so nothing depends on a
-shell environment variable. Burning the result with the host tool is the same as
-any vendor image.
+and the on-flash layout come from `boards/d13x-nor.toml` (or
+`boards/d21x-nand.toml`), and this crate's `build.rs` reads the same file, so
+nothing depends on a shell environment variable. Burning the result with the host
+tool is the same as any vendor image.
 
 ## Notes
 
 * Every PBP slot carries our own `pbp-common`; there is no vendor PBP and no
   `pbp_cfg.bin`.
 * `[image] app` empty boots the first valid AIC image after the `bootloader`
-  partition; set it to a name to pin one.
+  partition; set it to a name to pin one. It lives in the board preset.

@@ -5,29 +5,28 @@ edition = "2024"
 
 [dependencies]
 artinchip-hal = { version = "0.0.0", path = "../../../artinchip-hal" }
-artinchip-rt = { version = "0.0.0", path = "../../../artinchip-rt" }
+artinchip-rt = { version = "0.0.0", path = "../../../artinchip-rt", default-features = false, features = ["interrupts"] }
 embassy-futures = "0.1.2"
-# Needed by the `clic_bind_interrupts!`/`app_entry!` macro expansions, which emit
-# `paste!` in the caller's scope.
-paste = "1.0"
-# Provides the `critical-section` implementation used by the HAL; no direct
-# `riscv::` reference, but dropping it breaks the link.
-riscv = { version = "0.16.1", features = ["critical-section-single-hart"] }
-log = { version = "0.4", default-features = false }
 embedded-hal = "1.0.0"
-w25qxxxjv = { git = "https://github.com/CosmoBunny/w25qxxxjv.git", branch = "main", default-features = false, features = ["manual_delay"] }
+log = { version = "0.4", default-features = false }
 
 [build-dependencies]
-aicfwc = { version = "0.0.0", path = "../../../aicfwc" }
+aicfwc = { version = "0.0.0", path = "../../../aicfwc", default-features = false }
 
 [features]
-default = ["d13x"]
+default = ["d13x", "nor"]
 logger = ["artinchip-hal/uart-logger"]
+nor = []
+nand = []
+quad = []
+dma = []
 d13x = [
     "artinchip-rt/d13x",
-    "artinchip-rt/app",
-    "artinchip-rt/interrupts",
-    "artinchip-hal/d13x",
-    "artinchip-hal/clic-interrupts",
+    "artinchip-hal/async-usb",
+    "logger",
+]
+d21x = [
+    "artinchip-rt/d21x",
+    "artinchip-hal/async-usb",
     "logger",
 ]
