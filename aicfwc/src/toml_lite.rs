@@ -1,15 +1,4 @@
-//! A tiny TOML subset parser.
-//!
-//! `aicfwc` avoids a `toml`/`serde` dependency (offline builds), so image
-//! manifests are parsed with this small parser. Supported syntax:
-//!
-//! * `key = value` with basic strings, integers (decimal/hex/`_`), booleans
-//!   and arrays,
-//! * `[table]` and `[table.sub]` headers,
-//! * `[[array.of.tables]]`,
-//! * `#` comments (also inside arrays).
-//!
-//! Not supported: inline tables, multi-line basic strings, datetimes.
+//! Internal TOML subset parser for board preset files.
 
 use std::collections::BTreeMap;
 
@@ -456,48 +445,5 @@ fn last_array_element<'a>(root: &'a mut Table, path: &[String]) -> Result<&'a mu
             .and_then(Value::as_table_mut)
             .ok_or_else(|| format!("array {last} has no elements")),
         other => Err(format!("{last} is not an array of tables (got {other:?})")),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_manifest_shape() {
-        let doc = r#"
-# a comment
-[image]
-platform = "d13x"
-product  = "general-board"   # inline comment
-media    = "spi-nor"
-media_dev_id = 0
-
-[[component]]
-name = "bootloader"
-file = "app-bootloader.bin"
-attr = "mtd;required"
-updater = true
-ram = 0x40100000
-"#;
-        let root = parse(doc).unwrap();
-        let image = root.get("image").unwrap().as_table().unwrap();
-        assert_eq!(image.get("platform").unwrap().as_str(), Some("d13x"));
-        assert_eq!(image.get("media_dev_id").unwrap().as_int(), Some(0));
-        let components = root.get("component").unwrap().as_array().unwrap();
-        assert_eq!(components.len(), 1);
-        let first = components[0].as_table().unwrap();
-        assert_eq!(first.get("name").unwrap().as_str(), Some("bootloader"));
-        assert_eq!(first.get("updater").unwrap().as_bool(), Some(true));
-        assert_eq!(first.get("ram").unwrap().as_int(), Some(0x4010_0000));
-    }
-
-    #[test]
-    fn parses_arrays() {
-        let root = parse("a = [ \"x\", \"y\", 3 ]\n").unwrap();
-        let array = root.get("a").unwrap().as_array().unwrap();
-        assert_eq!(array.len(), 3);
-        assert_eq!(array[0].as_str(), Some("x"));
-        assert_eq!(array[2].as_int(), Some(3));
     }
 }

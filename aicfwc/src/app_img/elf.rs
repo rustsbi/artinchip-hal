@@ -1,16 +1,27 @@
-//! Minimal ELF32 parser: turns an application ELF directly into an AIC `loader`
+//! Minimal ELF parser: turns an application ELF directly into an AIC `loader`
 //! payload, or flattens a PBP ELF. Only what the image packer needs is
 //! implemented.
+//!
+//! Both classes are supported because the chips differ: the D13x's E907 images
+//! are ELF32, the D21x's C906 images ELF64. Addresses are narrowed to `u32` — every
+//! load address in these images is well below 4 GiB — and a value that does not
+//! fit is an error rather than a truncation.
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 
-/// `SHF_ALLOC`.
-const SHF_ALLOC: u32 = 0x2;
-/// `SHT_PROGBITS`.
+const SHF_ALLOC: u64 = 0x2;
 const SHT_PROGBITS: u32 = 1;
+const PT_LOAD: u32 = 1;
 
-/// ELF32 little-endian header fields both flattens need.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Class {
+    Elf32,
+    Elf64,
+}
+
+/// The header fields both flattens need, in one shape for either class.
 struct Header {
+    class: Class,
     entry: u32,
     phoff: usize,
     phentsize: usize,
@@ -20,27 +31,64 @@ struct Header {
     shnum: usize,
 }
 
+fn u16_at(data: &[u8], offset: usize) -> Result<u16> {
+    let bytes = data.get(offset..offset + 2).context("truncated ELF")?;
+    Ok(u16::from_le_bytes(bytes.try_into().unwrap()))
+}
+
+fn u32_at(data: &[u8], offset: usize) -> Result<u32> {
+    let bytes = data.get(offset..offset + 4).context("truncated ELF")?;
+    Ok(u32::from_le_bytes(bytes.try_into().unwrap()))
+}
+
+fn u64_at(data: &[u8], offset: usize) -> Result<u64> {
+    let bytes = data.get(offset..offset + 8).context("truncated ELF")?;
+    Ok(u64::from_le_bytes(bytes.try_into().unwrap()))
+}
+
+/// Narrow an ELF64 address: an AIC header has no field for anything wider.
+fn narrow(value: u64, what: &str) -> Result<u32> {
+    u32::try_from(value).with_context(|| format!("{what} {value:#x} does not fit in 32 bits"))
+}
+
 fn header(data: &[u8]) -> Result<Header> {
     if data.len() < 52 || &data[..4] != b"\x7fELF" {
         bail!("input is not an ELF file");
     }
-    if data[4] != 1 {
-        bail!("only ELF32 is supported");
-    }
     if data[5] != 1 {
         bail!("only little-endian ELF is supported");
     }
-    if u16::from_le_bytes(data[18..20].try_into().unwrap()) != 0xF3 {
+    if u16_at(data, 18)? != 0xF3 {
         bail!("ELF is not a RISC-V executable");
     }
-    Ok(Header {
-        entry: u32::from_le_bytes(data[0x18..0x1C].try_into().unwrap()),
-        phoff: u32::from_le_bytes(data[0x1C..0x20].try_into().unwrap()) as usize,
-        phentsize: u16::from_le_bytes(data[0x2A..0x2C].try_into().unwrap()) as usize,
-        phnum: u16::from_le_bytes(data[0x2C..0x2E].try_into().unwrap()) as usize,
-        shoff: u32::from_le_bytes(data[0x20..0x24].try_into().unwrap()) as usize,
-        shentsize: u16::from_le_bytes(data[0x2E..0x30].try_into().unwrap()) as usize,
-        shnum: u16::from_le_bytes(data[0x30..0x32].try_into().unwrap()) as usize,
+
+    let class = match data[4] {
+        1 => Class::Elf32,
+        2 => Class::Elf64,
+        other => bail!("unsupported ELF class {other}"),
+    };
+
+    Ok(match class {
+        Class::Elf32 => Header {
+            class,
+            entry: u32_at(data, 0x18)?,
+            phoff: u32_at(data, 0x1C)? as usize,
+            phentsize: u16_at(data, 0x2A)? as usize,
+            phnum: u16_at(data, 0x2C)? as usize,
+            shoff: u32_at(data, 0x20)? as usize,
+            shentsize: u16_at(data, 0x2E)? as usize,
+            shnum: u16_at(data, 0x30)? as usize,
+        },
+        Class::Elf64 => Header {
+            class,
+            entry: narrow(u64_at(data, 0x18)?, "entry point")?,
+            phoff: narrow(u64_at(data, 0x20)?, "program header offset")? as usize,
+            phentsize: u16_at(data, 0x36)? as usize,
+            phnum: u16_at(data, 0x38)? as usize,
+            shoff: narrow(u64_at(data, 0x28)?, "section header offset")? as usize,
+            shentsize: u16_at(data, 0x3A)? as usize,
+            shnum: u16_at(data, 0x3C)? as usize,
+        },
     })
 }
 
@@ -64,6 +112,57 @@ fn flatten(pieces: Vec<(u32, &[u8])>) -> Result<Vec<u8>> {
     Ok(image)
 }
 
+/// The loadable segments of an ELF, as `(file offset, virtual address, physical
+/// address, file size)`.
+///
+/// The physical address is the load address: a linker's `AT()` sets it apart
+/// from the virtual one, and a raw binary is what the load addresses describe.
+fn load_segments(data: &[u8], header: &Header) -> Result<Vec<(usize, u32, u32, usize)>> {
+    let mut segments = Vec::new();
+    for index in 0..header.phnum {
+        let offset = header.phoff + index * header.phentsize;
+        if u32_at(data, offset)? != PT_LOAD {
+            continue;
+        }
+        let (p_offset, p_vaddr, p_paddr, p_filesz) = match header.class {
+            Class::Elf32 => (
+                u32_at(data, offset + 4)? as usize,
+                u32_at(data, offset + 8)?,
+                u32_at(data, offset + 12)?,
+                u32_at(data, offset + 16)? as usize,
+            ),
+            Class::Elf64 => (
+                narrow(u64_at(data, offset + 8)?, "segment offset")? as usize,
+                narrow(u64_at(data, offset + 16)?, "segment address")?,
+                narrow(u64_at(data, offset + 24)?, "segment load address")?,
+                narrow(u64_at(data, offset + 32)?, "segment size")? as usize,
+            ),
+        };
+        let file_end = p_offset
+            .checked_add(p_filesz)
+            .filter(|end| *end <= data.len())
+            .with_context(|| format!("PT_LOAD segment {index} is out of range"))?;
+        segments.push((p_offset, p_vaddr, p_paddr, file_end - p_offset));
+    }
+    Ok(segments)
+}
+
+/// Where a section is loaded: its containing segment's physical address plus the
+/// section's offset inside that segment.
+///
+/// A section no `PT_LOAD` covers is not loaded by any segment, and there the
+/// virtual address is all there is — true of every section in an ELF with no
+/// program headers, where the two addresses coincide anyway.
+fn section_load_address(segments: &[(usize, u32, u32, usize)], address: u32) -> u32 {
+    for (_, p_vaddr, p_paddr, p_filesz) in segments {
+        let span = *p_filesz as u32;
+        if *p_vaddr <= address && address < p_vaddr.wrapping_add(span) {
+            return p_paddr.wrapping_add(address - *p_vaddr);
+        }
+    }
+    address
+}
+
 /// A flattened ELF image.
 #[derive(Clone, Debug)]
 pub struct ElfImage {
@@ -78,26 +177,13 @@ pub fn parse(data: &[u8]) -> Result<ElfImage> {
     let header = header(data)?;
     let entry = header.entry;
 
+    // The application image keeps the segments in *virtual* address order: the
+    // AIC header's `load_address`/`entry` are virtual addresses, and the app
+    // script has no `AT()`, so the two addresses coincide. A segment's file
+    // content is what lands in the image.
     let mut loads = Vec::new();
-    for index in 0..header.phnum {
-        let offset = header.phoff + index * header.phentsize;
-        if offset + 32 > data.len() {
-            bail!("program header {index} is out of range");
-        }
-        let p_type = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-        if p_type != 1 {
-            continue; // only PT_LOAD
-        }
-        let p_offset =
-            u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap()) as usize;
-        let p_vaddr = u32::from_le_bytes(data[offset + 8..offset + 12].try_into().unwrap());
-        let p_filesz =
-            u32::from_le_bytes(data[offset + 16..offset + 20].try_into().unwrap()) as usize;
-        let file_end = p_offset
-            .checked_add(p_filesz)
-            .filter(|end| *end <= data.len())
-            .ok_or_else(|| anyhow::anyhow!("PT_LOAD segment {index} is out of range"))?;
-        loads.push((p_vaddr, &data[p_offset..file_end]));
+    for (p_offset, p_vaddr, _, p_filesz) in load_segments(data, &header)? {
+        loads.push((p_vaddr, &data[p_offset..p_offset + p_filesz]));
     }
 
     if loads.is_empty() {
@@ -127,27 +213,37 @@ pub fn parse(data: &[u8]) -> Result<ElfImage> {
 /// image starts with `\x7fELF` where the PBP must start with `"PBP "`.
 pub fn to_binary(data: &[u8]) -> Result<Vec<u8>> {
     let header = header(data)?;
+    let segments = load_segments(data, &header)?;
 
     let mut sections = Vec::new();
     for index in 0..header.shnum {
         let offset = header.shoff + index * header.shentsize;
-        if offset + 40 > data.len() {
-            bail!("section header {index} is out of range");
-        }
-        let sh_type = u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap());
-        let sh_flags = u32::from_le_bytes(data[offset + 8..offset + 12].try_into().unwrap());
-        let sh_addr = u32::from_le_bytes(data[offset + 12..offset + 16].try_into().unwrap());
-        let sh_offset = u32::from_le_bytes(data[offset + 16..offset + 20].try_into().unwrap());
-        let sh_size = u32::from_le_bytes(data[offset + 20..offset + 24].try_into().unwrap());
+        let (sh_type, sh_flags, sh_addr, sh_offset, sh_size) = match header.class {
+            Class::Elf32 => (
+                u32_at(data, offset + 4)?,
+                u32_at(data, offset + 8)? as u64,
+                u32_at(data, offset + 12)? as u64,
+                u32_at(data, offset + 16)? as u64,
+                u32_at(data, offset + 20)? as u64,
+            ),
+            Class::Elf64 => (
+                u32_at(data, offset + 4)?,
+                u64_at(data, offset + 8)?,
+                u64_at(data, offset + 16)?,
+                u64_at(data, offset + 24)?,
+                u64_at(data, offset + 32)?,
+            ),
+        };
         if sh_type != SHT_PROGBITS || sh_flags & SHF_ALLOC == 0 || sh_size == 0 {
             continue;
         }
-        let start = sh_offset as usize;
+        let start = narrow(sh_offset, "section offset")? as usize;
         let end = start
-            .checked_add(sh_size as usize)
+            .checked_add(narrow(sh_size, "section size")? as usize)
             .filter(|end| *end <= data.len())
-            .ok_or_else(|| anyhow::anyhow!("section {index} content is out of range"))?;
-        sections.push((sh_addr, &data[start..end]));
+            .with_context(|| format!("section {index} content is out of range"))?;
+        let address = section_load_address(&segments, narrow(sh_addr, "section address")?);
+        sections.push((address, &data[start..end]));
     }
 
     if sections.is_empty() {
@@ -191,6 +287,51 @@ mod tests {
         data
     }
 
+    /// Assemble a minimal ELF64 with one 8-byte allocated `PROGBITS` section and
+    /// one `PT_LOAD` segment covering it — the shape a D21x application ELF has.
+    fn synth64() -> Vec<u8> {
+        const CONTENT: usize = 0x100;
+        const PHOFF: usize = 0x40;
+        const SHOFF: usize = 0x200;
+        const ADDR: u64 = 0x4200_0100;
+
+        let mut data = vec![0u8; 0x280];
+        data[..4].copy_from_slice(b"\x7fELF");
+        data[4] = 2; // ELF64
+        data[5] = 1; // little endian
+        data[18..20].copy_from_slice(&0xF3u16.to_le_bytes()); // EM_RISCV
+        data[0x18..0x20].copy_from_slice(&(ADDR + 8).to_le_bytes()); // e_entry
+        data[0x20..0x28].copy_from_slice(&(PHOFF as u64).to_le_bytes());
+        data[0x28..0x30].copy_from_slice(&(SHOFF as u64).to_le_bytes());
+        data[0x36..0x38].copy_from_slice(&56u16.to_le_bytes()); // e_phentsize
+        data[0x38..0x3A].copy_from_slice(&1u16.to_le_bytes()); // e_phnum
+        data[0x3A..0x3C].copy_from_slice(&64u16.to_le_bytes()); // e_shentsize
+        data[0x3C..0x3E].copy_from_slice(&2u16.to_le_bytes()); // e_shnum
+
+        data[CONTENT..CONTENT + 8].copy_from_slice(b"ABCDEFGH");
+
+        // One PT_LOAD covering the section.
+        let mut ph = [0u8; 56];
+        ph[0..4].copy_from_slice(&PT_LOAD.to_le_bytes());
+        ph[4..8].copy_from_slice(&5u32.to_le_bytes()); // R+X
+        ph[8..16].copy_from_slice(&(CONTENT as u64).to_le_bytes());
+        ph[16..24].copy_from_slice(&ADDR.to_le_bytes());
+        ph[24..32].copy_from_slice(&ADDR.to_le_bytes()); // p_paddr == p_vaddr
+        ph[32..40].copy_from_slice(&8u64.to_le_bytes()); // p_filesz
+        ph[40..48].copy_from_slice(&8u64.to_le_bytes()); // p_memsz
+        data[PHOFF..PHOFF + 56].copy_from_slice(&ph);
+
+        // Section 0 (null, already zero) and section 1: allocated PROGBITS.
+        let mut sh = [0u8; 64];
+        sh[4..8].copy_from_slice(&SHT_PROGBITS.to_le_bytes());
+        sh[8..16].copy_from_slice(&SHF_ALLOC.to_le_bytes());
+        sh[16..24].copy_from_slice(&ADDR.to_le_bytes());
+        sh[24..32].copy_from_slice(&(CONTENT as u64).to_le_bytes());
+        sh[32..40].copy_from_slice(&8u64.to_le_bytes());
+        data[SHOFF + 64..SHOFF + 128].copy_from_slice(&sh);
+        data
+    }
+
     #[test]
     fn to_binary_keeps_allocated_progbits_only() {
         let mut content = Vec::new();
@@ -201,12 +342,12 @@ mod tests {
         let base = CONTENT_BASE;
         let sections = [
             (0, 0, 0, 0, 0), // null entry
-            (SHT_PROGBITS, SHF_ALLOC, 0x3004_4000, base, 8),
+            (SHT_PROGBITS, SHF_ALLOC as u32, 0x3004_4000, base, 8),
             // NOBITS (`.bss`): occupies an address but has no file content.
-            (8, SHF_ALLOC, 0x3004_4008, 0, 8),
+            (8, SHF_ALLOC as u32, 0x3004_4008, 0, 8),
             // Not allocated: `rust-objcopy -O binary` drops it.
             (SHT_PROGBITS, 0, 0x3004_4008, base + 8, 8),
-            (SHT_PROGBITS, SHF_ALLOC, 0x3004_4010, base + 16, 8),
+            (SHT_PROGBITS, SHF_ALLOC as u32, 0x3004_4010, base + 16, 8),
         ];
         let image = to_binary(&synth(&sections, &content)).unwrap();
 
@@ -218,7 +359,17 @@ mod tests {
     }
 
     #[test]
-    fn to_binary_rejects_non_elf() {
-        assert!(to_binary(b"not an elf at all").is_err());
+    fn elf64_segments_and_sections() {
+        let data = synth64();
+
+        // Sections: the PBP path.
+        assert_eq!(to_binary(&data).unwrap(), b"ABCDEFGH");
+
+        // Segments: the application path, with the AIC header stripped off.
+        let image = parse(&data).unwrap();
+        assert_eq!(image.entry, 0x4200_0108);
+        assert_eq!(image.min_vaddr, 0x4200_0100);
+        assert_eq!(image.load_address, 0x4200_0000);
+        assert_eq!(image.payload, b"ABCDEFGH");
     }
 }

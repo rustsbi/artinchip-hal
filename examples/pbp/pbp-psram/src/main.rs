@@ -33,6 +33,7 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
         &mut delay,
         &p.syscfg,
         &p.cmu,
+        &clocks,
     ) {
         Ok(driver) => driver,
         Err(e) => {

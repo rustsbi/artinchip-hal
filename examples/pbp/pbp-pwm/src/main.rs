@@ -3,6 +3,7 @@
 
 use artinchip_hal::prelude::*;
 use artinchip_hal::pwm::*;
+use artinchip_hal::system;
 use artinchip_hal::uart::*;
 use artinchip_rt::{Peripherals, default_clk_tree, pbp_entry, prelude::*};
 use embedded_time::rate::Hertz;
@@ -46,5 +47,5 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
     );
     pwm_ch3.enable();
 
-    loop {}
+    system::halt();
 }

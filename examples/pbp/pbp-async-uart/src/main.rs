@@ -1,12 +1,12 @@
 #![no_std]
 #![no_main]
-#![feature(abi_riscv_interrupt)]
 
-use artinchip_hal::clic_bind_interrupts;
+use core::fmt::Write as _;
+
+use artinchip_hal::bind_interrupts;
 use artinchip_hal::prelude::*;
 use artinchip_hal::uart::*;
 use artinchip_rt::{Peripherals, default_clk_tree, pbp_entry, prelude::*};
-use core::fmt::Write as _;
 use embassy_futures::block_on;
 use embedded_io_async::Read as _;
 use embedded_io_async::Write as _;
@@ -14,7 +14,7 @@ use heapless::String;
 use log::info;
 use panic_halt as _;
 
-clic_bind_interrupts!(struct Irqs {
+bind_interrupts!(struct Irqs {
     UART3 => AsyncUartHandler<3>;
 });
 
@@ -50,8 +50,18 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
 
     let uart0_tx = p.gpioa.pa0.into_uart0_tx();
     let uart0_rx = p.gpioa.pa1.into_uart0_rx();
-    let uart3_tx = p.gpioa.pa6.into_uart3_tx();
-    let uart3_rx = p.gpioa.pa7.into_uart3_rx();
+    #[cfg(not(feature = "d21x"))]
+    let (uart3_tx, uart3_rx, pin_hint) = (
+        p.gpioa.pa6.into_uart3_tx(),
+        p.gpioa.pa7.into_uart3_rx(),
+        "PA6 -> UART3_TX, PA7 -> UART3_RX",
+    );
+    #[cfg(feature = "d21x")]
+    let (uart3_tx, uart3_rx, pin_hint) = (
+        p.gpioc.pc5.into_uart3_tx(),
+        p.gpioc.pc6.into_uart3_rx(),
+        "PC5 -> UART3_TX, PC6 -> UART3_RX",
+    );
     let mut uart3_async = p.uart3.new_async(
         uart3_tx,
         uart3_rx,
@@ -71,7 +81,7 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
     .unwrap();
 
     info!("Async UART example started. Please check the output on UART3.");
-    info!("PA6 -> UART3_TX, PA7 -> UART3_RX");
+    info!("{pin_hint}");
 
     block_on(async {
         let mut buf: String<128> = String::new();

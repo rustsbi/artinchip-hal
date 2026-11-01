@@ -1,7 +1,4 @@
-//! `"AIC "` boot image container support.
-//!
-//! Mirrors the layout produced by the official `tools/scripts/mk_image.py`
-//! (`aic_boot_*` functions). An AIC image is:
+//! `"AIC "` boot image container.
 //!
 //! ```text
 //! 0x000  256-byte AIC header
@@ -12,11 +9,11 @@
 //! +0x000 MD5 of image[8..sign_offset] at `sign_offset`
 //! ```
 //!
-//! Integrity follows the vendor tool:
 //! * `sign_offset = round_up(content, 256)`, `sign_length = 16` (MD5),
 //! * 32-bit word sum of the whole image must equal `0xFFFF_FFFF`.
 
 use crate::checksum::{checksum_for_words, verify_checksum};
+use crate::preset::{EXT_ALIGNMENT, NAME_MAX};
 use crate::util::round_up;
 
 /// AIC header size in bytes.
@@ -25,21 +22,16 @@ pub const AIC_HEADER_SIZE: usize = 256;
 pub const RESOURCE_ALIGNMENT: usize = 32;
 /// Image/content alignment.
 pub const IMAGE_ALIGNMENT: usize = 256;
-/// Alignment when a concatenated (`with_ext`) loader is appended.
-pub const EXT_ALIGNMENT: usize = 512;
 /// MD5 digest size.
 pub const MD5_SIZE: usize = 16;
 /// Default `head_ver` value used by the vendor tool.
 pub const DEFAULT_HEADER_VERSION: u32 = 0x0001_0001;
 
-/// Offset of the optional application name header field.
-///
-/// Inside the vendor-reserved part of the 256-byte header (`0x54..0x100`), so a
-/// vendored tool that only verifies the word sum ignores it. The matching reader
-/// lives in `artinchip-hal/src/system/image.rs`; keep both in sync.
+/// Offset of the optional application name (`0x54`, inside the header's reserved
+/// area). The reader lives in `artinchip-hal/src/system/image.rs`.
 pub const NAME_OFFSET: usize = 0x54;
-/// Maximum application name length in bytes (the header has room for 32).
-pub const NAME_MAX: usize = 32;
+
+pub use crate::preset::{EXT_ALIGNMENT as AIC_EXT_ALIGNMENT, NAME_MAX as AIC_NAME_MAX};
 
 /// Build the 256-byte `"AIC "` header from explicit field values.
 pub fn build_aic_header(header: &AicHeader) -> [u8; AIC_HEADER_SIZE] {
@@ -135,10 +127,11 @@ pub struct AicImageBuilder<'a> {
     private: Option<&'a [u8]>,
     app_name: Option<&'a str>,
     with_ext: bool,
+    ext_reserve: usize,
 }
 
 impl<'a> AicImageBuilder<'a> {
-    /// Create a builder with the vendor default header version.
+    /// Create a builder with the default header version.
     pub fn new() -> Self {
         Self {
             header_version: DEFAULT_HEADER_VERSION,
@@ -198,6 +191,20 @@ impl<'a> AicImageBuilder<'a> {
         self
     }
 
+    /// Reserve `bytes` between the PBP image and the concatenated (`with_ext`)
+    /// loader, moving [`AicHeader::loader_ext_offset`] up by that much.
+    ///
+    /// The nested loader is run in the RAM slot the BootROM copies the container
+    /// to, and the PBP it runs is placed there too — but a PBP's *stack* is
+    /// addressed relative to the code, so it lands in that same slot rather than in
+    /// the SRAM the PBP was linked for. Without a reserve the stack sits on top of
+    /// the loader that PBP is about to copy out of the container. See
+    /// `artinchip-rt/src/pbp.rs` for the layout the reservation has to cover.
+    pub fn ext_reserve(mut self, bytes: usize) -> Self {
+        self.ext_reserve = bytes;
+        self
+    }
+
     /// Build the AIC container.
     pub fn build(&self) -> Vec<u8> {
         let loader_len = self.loader.as_ref().map_or(0, |l| l.data.len());
@@ -216,8 +223,10 @@ impl<'a> AicImageBuilder<'a> {
         let signed_len = round_up(cursor, IMAGE_ALIGNMENT);
         let image_len = signed_len + MD5_SIZE;
 
+        // The reserve is kept a whole number of [`EXT_ALIGNMENT`]s so the nested
+        // loader stays aligned the same way it would without one.
         let loader_ext_offset = if self.with_ext {
-            round_up(image_len, EXT_ALIGNMENT)
+            round_up(image_len, EXT_ALIGNMENT) + round_up(self.ext_reserve, EXT_ALIGNMENT)
         } else {
             0
         };
@@ -384,5 +393,29 @@ mod tests {
         let read = |off: usize| u32::from_le_bytes(image[off..off + 4].try_into().unwrap());
         assert_eq!(read(NAME_OFFSET), NAME_MAX as u32);
         assert!(verify_checksum(&image, u32::MAX));
+    }
+
+    /// `ext_reserve` pushes the concatenated loader up by the reserved bytes, so a
+    /// PBP whose stack follows its own image does not land on the loader.
+    #[test]
+    fn ext_reserve_moves_the_concatenated_loader() {
+        let pbp = [0x5Au8; 27728];
+        let plain = AicImageBuilder::new().pbp(&pbp).with_ext(true).build();
+        let reserved = AicImageBuilder::new()
+            .pbp(&pbp)
+            .with_ext(true)
+            .ext_reserve(0x2000)
+            .build();
+
+        let read =
+            |image: &[u8], off: usize| u32::from_le_bytes(image[off..off + 4].try_into().unwrap());
+        let plain_ext = read(&plain, 0x50) as usize;
+        let reserved_ext = read(&reserved, 0x50) as usize;
+        assert_eq!(reserved_ext, plain_ext + 0x2000);
+        assert_eq!(reserved.len(), reserved_ext);
+        // The reserved bytes are a zero hole between the image and the loader.
+        assert!(reserved[plain_ext..reserved_ext].iter().all(|&b| b == 0));
+        // `image_length` is unaffected: the reserve is tail padding.
+        assert_eq!(read(&plain, 0x0c), read(&reserved, 0x0c));
     }
 }

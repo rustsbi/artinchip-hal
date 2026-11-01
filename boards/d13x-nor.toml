@@ -1,0 +1,100 @@
+# Board preset: ArtInChip D13x (RV32 E907) with a SPI-NOR W25Q128JV on QSPI0.
+#
+# This file is the single source of truth for the board: the flash layout, the
+# boot chain and the applications' link addresses. `aicfwc` packs images from it
+# and the `build.rs` scripts link against it, so nothing about this board is
+# repeated per application.
+#
+# Package it with (from the workspace root):
+#
+#   cargo run -p aicfwc -- --board d13x-nor --bootloader --build
+#   cargo run -p aicfwc -- --board d13x-nor --app app-blinky --build
+#
+# The preset schema is documented in `aicfwc/src/preset.rs`.
+
+[board]
+name = "d13x-nor"
+chip = "d13x"
+target = "riscv32imafc-unknown-none-elf"
+
+[image]
+platform = "d13x"
+product = "general-board"
+version = "0.1.0"
+media = "spi-nor"
+media_dev_id = 0
+# Empty boots the first partition after `bootloader` holding a valid AIC image -
+# `app`, where the applications go. Set a name to pin one by its AIC header name.
+app = ""
+
+# Our own on-flash layout (NOT the vendor `partition.json`); `build.rs` turns it
+# into `layout::FLASH_LAYOUT` and the same data is reported through
+# `GET_PARTITION_TABLE`. `bootloader` must stay at 0x0: the BootROM reads the
+# first-stage image there.
+[[partition]]
+name = "bootloader"
+offset = 0x000000
+size = 0x080000   # 512 KiB
+
+[[partition]]
+name = "app"
+offset = 0x080000
+size = 0x400000   # 4 MiB
+
+# Boot-chain components: `image.updater.*` (downloaded to `ram` and `EXEC`ed by
+# the host tool) and `image.target.*` (burned to a partition). An entry with both
+# `updater = true` and a `partition` expands to one of each. Every PBP slot carries
+# our own `pbp-common`.
+#
+# `features` is the component's complete feature set (built with
+# `--no-default-features --features <list>`): a board names its chip explicitly
+# instead of relying on a package's default features, which can belong to another
+# chip. All d13x components select the `d13x` half.
+
+# PSRAM bring-up helper whose entry is return-capable: `EXEC`ed while the host's
+# downloader is alive, it brings PSRAM up and **returns**. The other slots use the
+# same file, where PSRAM is off and it boots the loader.
+[[component]]
+kind = "pbp"
+name = "psram"
+updater = true
+ram = 0x30044000
+attr = "required;run"
+package = "pbp-common"
+features = ["d13x"]
+filename = "usbupg-psram-init.aic"
+
+# The bootloader, once for both roles: `updater = true` makes it
+# `image.updater.bootloader`, `partition` makes the same payload the on-flash
+# `image.target.bootloader`.
+#
+# `pbp_package` boots the loader from the RAM container (`ram`) when one is there,
+# otherwise from flash offset 0, so a blank board and one left half-written by an
+# interrupted burn both work. `name` is the AIC header app name, which is how
+# `pbp-common` recognises the container in the RAM slot.
+[[component]]
+kind = "app"
+name = "bootloader"
+updater = true
+ram = 0x40100000
+attr = "required;run"
+partition = "bootloader"
+package = "app-bootloader"
+features = ["d13x", "nor"]
+pbp_features = ["d13x"]
+filename = "bootloader.aic"
+target_filename = "app-bootloader.aic"
+load_address = 0x406c0000
+entry_offset = 0x100
+pbp_package = "pbp-common"
+
+# Applications. The table key is the cargo package; `load_address` is the link
+# base (`APP_BASE`) the package's `build.rs` links it at, and `aicfwc` validates
+# the built ELF against it. `name` is the AIC header name the bootloader matches.
+[apps.app-blinky]
+name = "blinky"
+partition = "app"
+filename = "app-blinky.aic"
+attr = "mtd;optional"
+load_address = 0x40700000
+features = ["d13x"]
