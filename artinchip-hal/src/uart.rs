@@ -6,7 +6,7 @@ mod error;
 mod instance;
 #[cfg(feature = "uart-logger")]
 mod logger;
-#[cfg(feature = "clic-interrupts")]
+#[cfg(feature = "interrupts")]
 mod non_blocking;
 mod pad;
 mod register;
@@ -18,7 +18,7 @@ pub use error::*;
 pub use instance::Uart;
 #[cfg(feature = "uart-logger")]
 pub use logger::*;
-#[cfg(feature = "clic-interrupts")]
+#[cfg(feature = "interrupts")]
 pub use non_blocking::*;
 pub use pad::*;
 pub use register::*;

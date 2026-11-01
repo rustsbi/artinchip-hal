@@ -1,5 +1,22 @@
 //! SoC peripheral support for ArtInChip chips.
 #![no_std]
+#![cfg_attr(
+    all(
+        any(target_arch = "riscv32", target_arch = "riscv64"),
+        feature = "interrupts"
+    ),
+    feature(abi_riscv_interrupt)
+)]
+
+#[cfg(any(
+    all(feature = "d12x", feature = "d13x"),
+    all(feature = "d12x", feature = "d21x"),
+    all(feature = "d13x", feature = "d21x"),
+))]
+compile_error!("Enable only one SoC feature: d12x, d13x, or d21x.");
+
+// Ensure `riscv` (`critical-section-single-hart`) is linked for downstream crates.
+use riscv as _;
 
 pub mod axi_cfg;
 pub mod cache;
@@ -11,7 +28,7 @@ pub mod dma;
 pub mod gpio;
 pub mod gtc;
 pub mod i2c;
-#[cfg(feature = "clic-interrupts")]
+#[cfg(feature = "interrupts")]
 pub mod interrupt;
 pub mod pad;
 pub mod pwm;
@@ -58,7 +75,7 @@ pub mod instances {
     pub use crate::axi_cfg::AxiCfg;
     pub use crate::ce::Ce;
     pub use crate::clic::Clic;
-    pub use crate::clint::Clint;
+    pub use crate::clint::{ClintV1, ClintV2};
     pub use crate::cmu::Cmu;
     pub use crate::dma::Dma;
     pub use crate::gtc::Gtc;
@@ -69,7 +86,7 @@ pub mod instances {
     pub use crate::sdmc::Sdmc;
     pub use crate::sid::Sid;
     pub use crate::spi_enc::SpiEnc;
-    pub use crate::sys_cfg::SysCfg;
+    pub use crate::sys_cfg::{SocSysCfg, SysCfg, V1, V2};
     pub use crate::uart::Uart;
     #[cfg(not(feature = "d12x"))]
     pub use crate::usbdrd::UsbDev;

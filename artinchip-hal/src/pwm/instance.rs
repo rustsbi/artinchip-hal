@@ -1,4 +1,4 @@
-//! DMA instance.
+//! PWM instance.
 
 use super::config::PwmConfig;
 use super::driver::PwmChDriver;

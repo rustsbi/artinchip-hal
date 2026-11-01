@@ -14,7 +14,7 @@ use super::instance::{Uart, UartInterrupt};
 use super::pad::{Receive, Transmit, UartPad};
 use super::register::RegisterBlock;
 use crate::cmu::{ClockTree, Cmu};
-use crate::interrupt::clic::typelevel::{self, Interrupt as _};
+use crate::interrupt::typelevel::{self, Interrupt as _};
 use crate::types::RingBuffer;
 
 const RX_BUF_SIZE: usize = 256;

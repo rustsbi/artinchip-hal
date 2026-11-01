@@ -10,6 +10,8 @@
 //! `loader_load_address` is the **container base**: the payload sits one header
 //! above it, hence the packer computes `min_vaddr - 0x100`.
 
+use crate::spi_flash::RawNandFlash;
+
 /// `"AIC "` header size.
 pub const AIC_HEADER_SIZE: usize = 256;
 
@@ -40,10 +42,68 @@ pub enum Error {
     NoLoader,
 }
 
-/// Random-access byte source an image can be read from (SPI-NOR, RAM, ...).
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Read => write!(f, "image source read failed"),
+            Self::NotAic => write!(f, "no AIC header at the requested offset"),
+            Self::NoLoader => write!(f, "AIC header has no usable loader"),
+        }
+    }
+}
+
+impl core::error::Error for Error {}
+
+/// Random-access byte source an image can be read from (SPI-NOR, SPI-NAND, RAM, ...).
 pub trait ReadAt {
     /// Fill `buf` with `buf.len()` bytes starting at `offset`.
     fn read_at(&mut self, offset: u32, buf: &mut [u8]) -> Result<(), Error>;
+}
+
+impl<F> ReadAt for F
+where
+    F: embedded_storage::nor_flash::ReadNorFlash,
+{
+    fn read_at(&mut self, offset: u32, buf: &mut [u8]) -> Result<(), Error> {
+        embedded_storage::nor_flash::ReadNorFlash::read(self, offset, buf).map_err(|_| Error::Read)
+    }
+}
+
+/// [`ReadAt`] adapter over any [`RawNandFlash`] device.
+pub struct NandRead<F>(pub F);
+
+impl<F> ReadAt for NandRead<F>
+where
+    F: RawNandFlash,
+{
+    fn read_at(&mut self, offset: u32, buf: &mut [u8]) -> Result<(), Error> {
+        self.0.read(offset as usize, buf).map_err(|_| Error::Read)
+    }
+}
+
+/// [`ReadAt`] adapter over an initialized memory-mapped RAM/PSRAM/DRAM window.
+pub struct Ram {
+    _private: (),
+}
+
+impl Ram {
+    /// Create a memory-mapped `ReadAt` reader.
+    ///
+    /// # Safety
+    /// Every `[offset, offset + len)` range subsequently queried through [`ReadAt`]
+    /// must reside in initialized, readable memory and not alias active `&mut` borrows.
+    pub const unsafe fn new() -> Self {
+        Self { _private: () }
+    }
+}
+
+impl ReadAt for Ram {
+    fn read_at(&mut self, offset: u32, buf: &mut [u8]) -> Result<(), Error> {
+        unsafe {
+            core::ptr::copy_nonoverlapping(offset as *const u8, buf.as_mut_ptr(), buf.len());
+        }
+        Ok(())
+    }
 }
 
 /// A loader resolved from an AIC container.
@@ -67,6 +127,21 @@ impl Loader {
             .ok()
             .filter(|name| !name.is_empty())
     }
+
+    /// Return `true` when both `[dst, dst + length)` and `entry` fall inside `[base, base + size)`.
+    pub const fn fits_window(&self, base: u32, size: u32) -> bool {
+        let start = base as u64;
+        let end = start + size as u64;
+        let dst = self.dst as u64;
+        let dst_end = dst + self.length as u64;
+        let entry = self.entry as u64;
+        dst >= start && dst_end <= end && entry >= start && entry < end
+    }
+}
+
+/// Return `true` when `loader`'s destination range and entry lie inside `[base, base + size)`.
+pub const fn loader_fits_window(loader: &Loader, base: u32, size: u32) -> bool {
+    loader.fits_window(base, size)
 }
 
 fn read_u32(header: &[u8], offset: usize) -> u32 {

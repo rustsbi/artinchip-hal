@@ -3,5 +3,5 @@
 mod instance;
 mod register;
 
-pub use instance::Clint;
+pub use instance::{ClintV1, ClintV2};
 pub use register::*;
