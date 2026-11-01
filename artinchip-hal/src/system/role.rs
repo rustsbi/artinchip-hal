@@ -1,11 +1,13 @@
 //! Boot-role handshake between the first stage and the loader it starts.
 //!
 //! `_start` clobbers `a0` (via `_init_vector_table`) before `main`, so the role
-//! cannot travel in registers. The first stage leaves it in a fixed PSRAM word
-//! just below the loader; undefined PSRAM after power-up reads as a normal boot.
+//! cannot travel in registers. The first stage leaves it in a fixed RAM word
+//! just below the loader; undefined memory after power-up reads as a normal boot.
 
-/// Role word: free PSRAM below the loader (`0x406c_0000`), clear of the updater
-/// RAM slot (`0x4010_0000`).
+/// Role word below the loader: D13x PSRAM, D21x DRAM.
+#[cfg(feature = "d21x")]
+const ROLE_ADDR: u32 = 0x40f0_0000;
+#[cfg(not(feature = "d21x"))]
 const ROLE_ADDR: u32 = 0x406b_f000;
 
 /// `"BOOT"`.

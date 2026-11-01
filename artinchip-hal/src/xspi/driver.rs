@@ -5,8 +5,8 @@ use super::error::PsramError;
 use super::register::{
     BoundarySize, ClockDivider, CsSel, Icp, IoCfg, LockCfg, PhaseSel, RegisterBlock, XspiMode,
 };
-use crate::cmu::{Cmu, LdoVoltage};
-use crate::sys_cfg::SysCfg;
+use crate::cmu::{ClockTree, Cmu, LdoVoltage};
+use crate::sys_cfg::{SysCfg, V1};
 use embedded_hal::delay::DelayNs;
 
 /// LUT instruction codes (`XSPI_LUTn` instruction field).
@@ -47,12 +47,13 @@ impl<'a> XspiDriver<'a> {
         chip: Chip,
         model: PsramModel,
         delay: &mut impl DelayNs,
-        syscfg: &'a SysCfg,
+        syscfg: &'a SysCfg<V1>,
         cmu: &'a Cmu,
+        clock_tree: &ClockTree,
     ) -> Result<Self, PsramError> {
         let cfg = PsramConfig::chip_model(chip, model);
 
-        let parent = parent_hz(cmu);
+        let parent = clock_tree.pll_fra0_hz(cmu).0;
         let divider = (parent / cfg.clock_hz.0.saturating_mul(2))
             .saturating_sub(1)
             .min(0x1f) as u8;
@@ -582,20 +583,6 @@ fn configure_io(reg: &RegisterBlock, cs: CsSel, io: &PsramIoConfig) {
             CsSel::Cs1 => v.enable_cs1_io(),
         });
     }
-}
-
-/// XSPI parent clock (`PLL_FRA0`) rate in Hz, or the 24 MHz crystal when the PLL
-/// is off (the state the BootROM can leave it in).
-fn parent_hz(cmu: &Cmu) -> u32 {
-    let general = cmu.register_block().pll_fra0_general.read();
-    if !general.is_pll_enabled() {
-        return 24_000_000;
-    }
-    let p = general.factor_p() as u32 + 1;
-    let n = general.factor_n() as u32 + 1;
-    let m = general.factor_m() as u32 + 1;
-    // PLL_O = [24 / (P + 1)] * [(N + 1) / (M + 1)] MHz.
-    24_000_000 / p * n / m
 }
 
 /// DLL input-clock range for `xspi_hz`.

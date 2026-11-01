@@ -17,13 +17,14 @@ embedded-io-async = { version = "0.7.0", optional = true }
 riscv = { version = "0.16.1", features = ["critical-section-single-hart"] }
 critical-section = "1.2.0"
 embassy-sync = { version = "0.8.0", optional = true }
-xuantie-riscv = {git = "https://github.com/rustsbi/xuantie.git", branch = "main"}
+xuantie-riscv = { git = "https://github.com/rustsbi/xuantie.git", rev = "b0837ce0dd373481f70deab30fb139da7f8cae06" }
+plic = "0.0.2"
 log = { version = "0.4", default-features = false }
 heapless = "0.9.3"
 
 [features]
 uart-logger = []
-clic-interrupts = ["dep:embassy-sync", "dep:embedded-io-async"]
+interrupts = ["dep:embassy-sync", "dep:embedded-io-async"]
 d12x = []
 d13x = []
 d21x = []

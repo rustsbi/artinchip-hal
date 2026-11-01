@@ -151,6 +151,32 @@ where
         }
     }
 
+    /// Get the raw period count currently loaded in the time-base register.
+    pub fn period_counts(&self) -> u16 {
+        let channel = &self.reg.channels[I as usize];
+        channel.tb_prd.read().tb_prd()
+    }
+
+    /// Update channel A compare value directly, without recomputing the period.
+    pub fn set_duty_a_counts(&mut self, compare: u16) {
+        let period = self.period_counts();
+        let compare = compare.min(period);
+        let channel = &self.reg.channels[I as usize];
+        unsafe {
+            channel.cmp_a.modify(|v| v.set_cmp(compare));
+        }
+    }
+
+    /// Update channel B compare value directly, without recomputing the period.
+    pub fn set_duty_b_counts(&mut self, compare: u16) {
+        let period = self.period_counts();
+        let compare = compare.min(period);
+        let channel = &self.reg.channels[I as usize];
+        unsafe {
+            channel.cmp_b.modify(|v| v.set_cmp(compare));
+        }
+    }
+
     /// Convert period in nanoseconds to frequency in Hertz.
     fn period2hertz(&self, period: Nanoseconds) -> Hertz {
         Hertz::new(1_000_000_000 / period.0)

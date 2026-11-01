@@ -2,12 +2,14 @@
 
 mod channel;
 mod dma_ext;
+mod id;
 mod instance;
 mod register;
 mod task;
 
 pub use channel::*;
 pub use dma_ext::DmaExt;
+pub use id::*;
 pub use instance::Dma;
 pub use register::*;
 pub use task::*;

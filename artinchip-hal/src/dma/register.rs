@@ -1,5 +1,6 @@
 //! DMA register blocks and registers.
 
+use super::id::DmaId;
 use volatile_register::{RO, RW};
 
 /// Direct Memory Access register block.
@@ -735,10 +736,20 @@ impl ChConfig {
     pub const fn set_snk_dev(self, dev: u8) -> Self {
         Self((self.0 & !Self::SNK_DEV) | ((dev as u32) << 16))
     }
+    /// Set sink device using [DmaId].
+    #[inline]
+    pub const fn set_snk_dma_id(self, id: DmaId) -> Self {
+        self.set_snk_dev(id.raw())
+    }
     /// Get sink device.
     #[inline]
     pub const fn snk_dev(self) -> u8 {
         ((self.0 & Self::SNK_DEV) >> 16) as u8
+    }
+    /// Get sink device as [DmaId].
+    #[inline]
+    pub fn snk_dma_id(self) -> Result<DmaId, u8> {
+        DmaId::try_from(self.snk_dev())
     }
     /// Set source data width (`SRC_DATA_WIDTH`).
     #[doc(alias = "SRC_DATA_WIDTH")]
@@ -795,10 +806,20 @@ impl ChConfig {
     pub const fn set_src_dev(self, dev: u8) -> Self {
         Self((self.0 & !Self::SRC_DEV) | (dev as u32))
     }
+    /// Set source device using [DmaId].
+    #[inline]
+    pub const fn set_src_dma_id(self, id: DmaId) -> Self {
+        self.set_src_dev(id.raw())
+    }
     /// Get source device.
     #[inline]
     pub const fn src_dev(self) -> u8 {
         (self.0 & Self::SRC_DEV) as u8
+    }
+    /// Get source device as [DmaId].
+    #[inline]
+    pub fn src_dma_id(self) -> Result<DmaId, u8> {
+        DmaId::try_from(self.src_dev())
     }
 }
 
@@ -911,7 +932,7 @@ impl ChMode {
 #[cfg(test)]
 mod tests {
     use super::{
-        BurstSize, ChConfig, ChEnable, ChMode, ChPause, ChStatus, DataWidth, DmaCh, Gate,
+        BurstSize, ChConfig, ChEnable, ChMode, ChPause, ChStatus, DataWidth, DmaCh, DmaId, Gate,
         HandshakeMode, IntEnable, IntStatus, MemBurst, MemCfg, RegisterBlock,
     };
     use core::mem::{offset_of, size_of};
@@ -1145,6 +1166,9 @@ mod tests {
         let val = ChConfig(0).set_snk_dev(0x3F);
         assert_eq!(val.snk_dev(), 0x3F);
         assert_eq!(val.0, 0x003F_0000);
+        let val_dma = ChConfig(0).set_snk_dma_id(DmaId::Sram);
+        assert_eq!(val_dma.snk_dma_id(), Ok(DmaId::Sram));
+        assert_eq!(val_dma.snk_dev(), 0);
 
         for i in 0..4 {
             let (data_width, reg_val) = match i {
@@ -1183,6 +1207,9 @@ mod tests {
         let val = ChConfig(0).set_src_dev(0x3F);
         assert_eq!(val.src_dev(), 0x3F);
         assert_eq!(val.0, 0x0000_003F);
+        let val_src_dma = ChConfig(0).set_src_dma_id(DmaId::Sram);
+        assert_eq!(val_src_dma.src_dma_id(), Ok(DmaId::Sram));
+        assert_eq!(val_src_dma.src_dev(), 0);
     }
 
     #[test]

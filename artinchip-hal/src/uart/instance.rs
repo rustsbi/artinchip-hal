@@ -7,37 +7,37 @@ use super::register::RegisterBlock;
 use super::uart_ext::UartExt;
 use crate::cmu::{ClockTree, Cmu};
 use core::marker::PhantomData;
-#[cfg(feature = "clic-interrupts")]
-use {super::non_blocking::*, crate::interrupt::clic::typelevel};
+#[cfg(feature = "interrupts")]
+use {
+    super::non_blocking::*,
+    crate::interrupt::{InterruptSource as _, typelevel},
+};
 
-/// Trait to map const generic I to its interrupt type (used for compile-time safety).
-#[cfg(feature = "clic-interrupts")]
+/// Trait mapping const generic `I` to its type-level interrupt source.
+#[cfg(feature = "interrupts")]
 pub trait UartInterrupt<const I: u8> {
     type Interrupt: typelevel::Interrupt;
 }
 
-// Macro to quickly map instance numbers to interrupt types
-#[cfg(feature = "clic-interrupts")]
+#[cfg(feature = "interrupts")]
 macro_rules! impl_uart_interrupts {
     ( $( ($inst:literal, $irq_type:ident) ),* $(,)? ) => {
         $(
             impl UartInterrupt<$inst> for Uart<$inst> {
-                type Interrupt = crate::interrupt::clic::typelevel::$irq_type;
+                type Interrupt = crate::interrupt::typelevel::$irq_type;
             }
         )*
     };
 }
 
-// Macro to quickly map instance numbers to interrupt types
-#[cfg(feature = "clic-interrupts")]
+#[cfg(feature = "interrupts")]
 impl_uart_interrupts! {
     (0, UART0),
     (1, UART1),
     (2, UART2),
     (3, UART3),
 }
-#[cfg(feature = "clic-interrupts")]
-#[cfg(not(feature = "d12x"))]
+#[cfg(all(feature = "interrupts", not(feature = "d12x")))]
 impl_uart_interrupts! {
     (4, UART4),
     (5, UART5),
@@ -65,8 +65,8 @@ impl<const I: u8> Uart<I> {
         unsafe { &*self.reg }
     }
 
-    /// Get register block for a specific index (used by Interrupt Handler).
-    #[cfg(feature = "clic-interrupts")]
+    /// Get register block for a specific index (used by the async interrupt handler).
+    #[cfg(feature = "interrupts")]
     #[inline(always)]
     pub(crate) unsafe fn regs_at_index() -> &'static RegisterBlock {
         let base_addr = 0x18710000 + (I as usize) * 0x1000;
@@ -91,7 +91,8 @@ impl<const I: u8> UartExt<'static, I> for Uart<I> {
     {
         BlockingSerial::new(self.register_block(), tx, rx, config, clock_tree, cmu)
     }
-    #[cfg(feature = "clic-interrupts")]
+
+    #[cfg(feature = "interrupts")]
     #[inline]
     fn new_async<TX, RX, IRQS>(
         self,
@@ -107,13 +108,13 @@ impl<const I: u8> UartExt<'static, I> for Uart<I> {
         TX: UartPad<I> + Transmit<I>,
         RX: UartPad<I> + Receive<I>,
         Uart<I>: UartInterrupt<I>,
-        AsyncUartHandler<I>:
-            crate::interrupt::clic::typelevel::Handler<<Uart<I> as UartInterrupt<I>>::Interrupt>,
-        IRQS: crate::interrupt::clic::typelevel::Binding<
-                <Uart<I> as UartInterrupt<I>>::Interrupt,
-                AsyncUartHandler<I>,
-            >,
+        AsyncUartHandler<I>: typelevel::Handler<<Uart<I> as UartInterrupt<I>>::Interrupt>,
+        IRQS: typelevel::Binding<<Uart<I> as UartInterrupt<I>>::Interrupt, AsyncUartHandler<I>>,
     {
-        AsyncSerial::new(self.register_block(), tx, rx, config, clock_tree, cmu)
+        <Uart<I> as UartInterrupt<I>>::Interrupt::disable();
+        IRQS::bind();
+        let serial = AsyncSerial::new(self.register_block(), tx, rx, config, clock_tree, cmu);
+        <Uart<I> as UartInterrupt<I>>::Interrupt::enable();
+        serial
     }
 }

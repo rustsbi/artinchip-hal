@@ -202,7 +202,7 @@ impl<'a> WdogDriver<'a> {
     }
 
     /// Free the driver and return WDOG instance.
-    pub fn free(self, cmu: &Cmu) -> Wdog {
+    pub fn free(self, cmu: &mut Cmu) -> Wdog {
         unsafe {
             let clk = &cmu.register_block().clock_wdog;
             clk.modify(|v| v.disable_bus_clk().disable_module_clk().enable_wdog_rst());

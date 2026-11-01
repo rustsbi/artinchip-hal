@@ -1,98 +1,117 @@
-//! CLIC interrupt management.
-#![allow(unsafe_op_in_unsafe_fn)]
+//! CLIC interrupt controller backend (D12x / D13x / G73x / M6800).
 
-const CLIC_BASE: u32 = 0x20800000;
+use core::cell::UnsafeCell;
+use core::sync::atomic::{Ordering, fence};
+
+use super::define_interrupt_mod;
+
+const CLIC_BASE: usize = 0x2080_0000;
+
+/// Number of hardware vector-table entries (`mtvt + 4 * ID`), covering `0..=109`.
+pub const MAX_INTERRUPTS: usize = 128;
+
+#[repr(C, align(64))]
+struct ClicVectorTable(UnsafeCell<[u32; MAX_INTERRUPTS]>);
+
+unsafe impl Sync for ClicVectorTable {}
+
+#[unsafe(link_section = ".clic.vector_table")]
+static VECTOR_TABLE: ClicVectorTable = ClicVectorTable(UnsafeCell::new([0; MAX_INTERRUPTS]));
 
 #[inline(always)]
 fn clic() -> &'static crate::clic::RegisterBlock {
     unsafe { &*(CLIC_BASE as *const crate::clic::RegisterBlock) }
 }
 
-/// Initialize the CLIC controller.
+/// Initialize the CLIC controller in hardware-vectored mode.
 ///
 /// # Safety
-/// Must only be called when the CLIC peripheral is present and the
-/// memory-mapped register block is valid for the current SoC.
+/// Must only be called when the CLIC peripheral is mapped on the current SoC.
 pub unsafe fn clic_init() {
     critical_section::with(|_| {
         let clic = clic();
-        clic.cfg.modify(|v| v.enable_vector_mode().set_nlbits(8));
-        clic.mint_thresh.modify(|v| v.set_mint_thresh(0));
+        unsafe {
+            clic.cfg.modify(|v| v.enable_vector_mode().set_nlbits(8));
+            clic.mint_thresh.modify(|v| v.set_mint_thresh(0));
+        }
     });
 }
 
-/// Enable a specific interrupt.
+/// Enable a specific CLIC interrupt source.
 ///
 /// # Safety
-/// The interrupt number must refer to a valid CLIC interrupt on the current SoC.
+/// `irq` must refer to a valid CLIC interrupt index (`< MAX_INTERRUPTS`).
 pub unsafe fn enable_interrupt(irq: u8) {
     critical_section::with(|_| {
         let clic = clic();
-        clic.interrupts[irq as usize].int_ie.modify(|v| v.enable());
+        unsafe {
+            clic.interrupts[irq as usize].int_ie.modify(|v| v.enable());
+        }
     });
 }
 
-/// Disable a specific interrupt.
+/// Disable a specific CLIC interrupt source.
 ///
 /// # Safety
-/// The interrupt number must refer to a valid CLIC interrupt on the current SoC.
+/// `irq` must refer to a valid CLIC interrupt index (`< MAX_INTERRUPTS`).
 pub unsafe fn disable_interrupt(irq: u8) {
     critical_section::with(|_| {
         let clic = clic();
-        clic.interrupts[irq as usize].int_ie.modify(|v| v.disable());
+        unsafe {
+            clic.interrupts[irq as usize].int_ie.modify(|v| v.disable());
+        }
     });
 }
 
-/// Set the level/priority for a specific interrupt.
+/// Set the priority byte for a specific CLIC interrupt source.
 ///
 /// # Safety
-/// The interrupt number must refer to a valid CLIC interrupt on the current SoC.
+/// `irq` must refer to a valid CLIC interrupt index (`< MAX_INTERRUPTS`).
 pub unsafe fn set_priority(irq: u8, priority: u8) {
     critical_section::with(|_| {
         let clic = clic();
-        clic.interrupts[irq as usize].int_ctl.write(priority);
+        unsafe {
+            clic.interrupts[irq as usize].int_ctl.write(priority);
+        }
     });
 }
 
-/// Set the attributes of a specific interrupt.
+/// Set hardware-vector, trigger, and privilege-mode attributes for `irq`.
 ///
 /// # Safety
-/// The interrupt number must refer to a valid CLIC interrupt on the current SoC.
+/// `irq` must refer to a valid CLIC interrupt index (`< MAX_INTERRUPTS`).
 pub unsafe fn set_interrupt_attribute(irq: u8, shv: bool, trig: u8, mode: u8) {
     critical_section::with(|_| {
         let clic = clic();
-        clic.interrupts[irq as usize]
-            .int_attr
-            .modify(|v| v.set_hardware_vector(shv).set_trig(trig).set_mode(mode));
+        unsafe {
+            clic.interrupts[irq as usize]
+                .int_attr
+                .modify(|v| v.set_hardware_vector(shv).set_trig(trig).set_mode(mode));
+        }
     });
 }
 
-/// Clear the pending status of a specific interrupt.
+/// Clear the pending status of a specific CLIC interrupt source.
 ///
 /// # Safety
-/// The interrupt number must refer to a valid CLIC interrupt on the current SoC.
+/// `irq` must refer to a valid CLIC interrupt index (`< MAX_INTERRUPTS`).
 pub unsafe fn clear_pending(irq: u8) {
     critical_section::with(|_| {
         let clic = clic();
-        clic.interrupts[irq as usize]
-            .int_ip
-            .modify(|v| v.clear_pending());
+        unsafe {
+            clic.interrupts[irq as usize]
+                .int_ip
+                .modify(|v| v.clear_pending());
+        }
     });
 }
 
-/// Check if a specific interrupt is currently pending.
+/// Check whether `irq` is currently pending.
 pub fn is_pending(irq: u8) -> bool {
-    let clic = clic();
-    clic.interrupts[irq as usize].int_ip.read().is_pending()
+    clic().interrupts[irq as usize].int_ip.read().is_pending()
 }
 
-/// Mask every interrupt source.
-///
-/// The CLIC's per-source enable bits survive a jump between images (BootROM, PBP
-/// and loader all run on the same core), so an image that wants a quiet
-/// controller - or that enables a single source - has to clear them all first:
-/// a source an earlier stage left enabled stays pending and is delivered to this
-/// image's vector table, and an unbound interrupt lands in the default handler.
+/// Mask every CLIC source and clear any pending requests inherited from earlier stages.
 ///
 /// # Safety
 /// The CLIC peripheral must be present and mapped on the current SoC.
@@ -100,190 +119,111 @@ pub unsafe fn mask_all_interrupts() {
     critical_section::with(|_| {
         let clic = clic();
         for interrupt in clic.interrupts.iter() {
-            interrupt.int_ie.modify(|v| v.disable());
+            unsafe {
+                interrupt.int_ie.modify(|v| v.disable());
+                interrupt.int_ip.modify(|v| v.clear_pending());
+            }
         }
     });
 }
 
-/// Generate type-level interrupt module
-#[macro_export]
-macro_rules! clic_interrupt_mod {
-    ($($irq_name:ident = $irq_num:expr),* $(,)?) => {
-        pub mod typelevel {
-            /// Common Trait for type-level interrupts
-            pub trait Interrupt {
-                const IRQ: u8;
-
-                #[inline(always)]
-                fn enable() { unsafe { $crate::interrupt::clic::enable_interrupt(Self::IRQ) } }
-
-                #[inline(always)]
-                fn disable() { unsafe { $crate::interrupt::clic::disable_interrupt(Self::IRQ) } }
-
-                #[inline(always)]
-                fn set_priority(prio: u8) { unsafe { $crate::interrupt::clic::set_priority(Self::IRQ, prio) } }
-
-                #[inline(always)]
-                fn is_pending() -> bool { $crate::interrupt::clic::is_pending(Self::IRQ) }
-
-                #[inline(always)]
-                fn clear_pending() { unsafe { $crate::interrupt::clic::clear_pending(Self::IRQ) } }
-            }
-
-            /// Drivers implement this Trait to handle interrupt logic
-            pub trait Handler<I: Interrupt> {
-                /// Function to be called when the interrupt fires.
-                /// # Safety
-                /// Must ONLY be called from the interrupt handler context.
-                unsafe fn on_interrupt();
-            }
-
-            /// Compile-time constraint: Proves the user has bound a Handler to an Interrupt.
-            ///
-            /// # Safety
-            /// Implementors must ensure the binding is valid for the selected interrupt.
-            pub unsafe trait Binding<I: Interrupt, H: Handler<I>> {}
-
-            // Generate specific ZST (Zero-Sized Type) for each hardware interrupt
-            $(
-                #[allow(non_camel_case_types)]
-                pub enum $irq_name {}
-                impl Interrupt for $irq_name {
-                    const IRQ: u8 = $irq_num;
-                }
-            )*
-        }
-    };
+#[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
+extern "riscv-interrupt-m" fn default_irq_handler() {
+    log::error!("Unhandled interrupt in CLIC vector table");
+    loop {
+        core::hint::spin_loop();
+    }
 }
 
-#[macro_export]
-macro_rules! clic_bind_interrupts {
-    ($vis:vis struct $name:ident { $($irq:ident => $handler:ty;)* }) => {
-        paste::paste! {
-            use log::error;
+#[cfg(not(any(target_arch = "riscv32", target_arch = "riscv64")))]
+extern "C" fn default_irq_handler() {
+    loop {
+        core::hint::spin_loop();
+    }
+}
 
-            // Generate hardware vector entry for each bound interrupt
-            $(
-                #[unsafe(no_mangle)]
-                pub extern "riscv-interrupt-m" fn [<__irq_handler_ $irq>]() {
-                    unsafe {
-                        <$handler as $crate::interrupt::clic::typelevel::Handler<
-                            $crate::interrupt::clic::typelevel::$irq
-                        >>::on_interrupt();
-                    }
-                }
-            )*
+#[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
+extern "riscv-interrupt-m" fn irq_trampoline<I: super::InterruptSource, H: super::Handler<I>>() {
+    unsafe { H::on_interrupt() };
+}
 
-            // Default handler (for unbound interrupts)
-            #[unsafe(no_mangle)]
-            pub extern "riscv-interrupt-m" fn __irq_handler_default() {
-                error!("Default interrupt handler called in CLIC vector table");
-                loop { core::hint::spin_loop(); }
-            }
+#[cfg(not(any(target_arch = "riscv32", target_arch = "riscv64")))]
+extern "C" fn irq_trampoline<I: super::InterruptSource, H: super::Handler<I>>() {
+    unsafe { H::on_interrupt() };
+}
 
-            // Global vector table, 64‑byte aligned (required by E907 CLIC mtvt hardware)
-            #[repr(C, align(64))]
-            struct ClicVectorTable([u32; 100]);
+/// Initialize CLIC hardware, install `mtvec`/`mtvt`, and populate default vectors.
+///
+/// # Safety
+/// Must only be called once during early image startup before enabling caches.
+pub unsafe fn init_vector_table() {
+    #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
+    riscv::interrupt::disable();
 
-            #[unsafe(link_section = ".clic.vector_table")]
-            static mut VECTOR_TABLE: ClicVectorTable = ClicVectorTable([0; 100]);
-
-            #[derive(Copy, Clone)]
-            $vis struct $name;
-
-            impl $name {
-                /// Initialize CLIC and fill the vector table (call BEFORE cache enable).
-                pub unsafe fn init_vector_table() {
-                    unsafe {
-                        // 0. Run the whole bring-up with interrupts disabled.
-                        //
-                        // `mstatus.MIE` is inherited from whatever ran before
-                        // this image, and so is the CLIC's per-source enable
-                        // mask. Until `mtvt` points at the vector table below, a
-                        // source an earlier stage left enabled would be taken
-                        // through a stale `mtvt` and vector into the previous
-                        // image. Masking here closes that window; the final step
-                        // re-enables interrupts once the table is live.
-                        ::riscv::interrupt::disable();
-
-                        // 1. Set mtvec (CLIC mode = 3, ensure address alignment)
-                        unsafe extern "C" { fn AlignedTrapHandler(); }
-                        let trap_addr = (AlignedTrapHandler as usize & !0x3) | 3;
-                        core::arch::asm!("csrw mtvec, {}", in(reg) trap_addr);
-
-                        // 2. Initialize CLIC hardware
-                        $crate::interrupt::clic::clic_init();
-
-                        // 2b. Mask everything an earlier stage may have left
-                        // enabled (the BootROM and the PBPs share this CLIC) before
-                        // this image enables its own sources below.
-                        $crate::interrupt::clic::mask_all_interrupts();
-
-                        // 2c. Install `mtvt` *before* any source is enabled.
-                        //
-                        // `clic_init` above turned vector mode on, so the moment a
-                        // source is enabled and `mstatus.MIE` allows it, the CLIC
-                        // fetches the handler through `mtvt`. Programming `mtvt`
-                        // after `enable_interrupt` (the old order) left a window in
-                        // which a source inherited as pending - the USB controller
-                        // is mid-transfer while the loader takes over - vectored
-                        // through the *previous* image's table and jumped into
-                        // unrelated code. Interrupts are masked (step 0), so the
-                        // table may be filled after this point.
-                        let vt_addr = &VECTOR_TABLE as *const _ as usize;
-                        core::arch::asm!("csrw 0x307, {}", in(reg) vt_addr);
-
-                        // 3. Fill all entries with the default handler
-                        let default_addr = (__irq_handler_default as usize & !0x3) as u32;
-                        for entry in VECTOR_TABLE.0.iter_mut() {
-                            *entry = default_addr;
-                        }
-
-                        // 4. Fill entries for bound interrupts and configure CLIC
-                        $(
-                            let irq_num = <$crate::interrupt::clic::typelevel::$irq as $crate::interrupt::clic::typelevel::Interrupt>::IRQ;
-                            let idx = irq_num as usize;
-                            VECTOR_TABLE.0[idx] = ([<__irq_handler_ $irq>] as usize & !0x3) as u32;
-
-                            $crate::interrupt::clic::set_priority(irq_num, 255);
-                            $crate::interrupt::clic::set_interrupt_attribute(irq_num, true, 0, 0);
-                        )*
-
-                        // 5. Ensure vector table writes are committed from store buffer to memory
-                        core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
-
-                        // 6. Now that the table is live, publish the sources.
-                        $(
-                            let irq_num = <$crate::interrupt::clic::typelevel::$irq as $crate::interrupt::clic::typelevel::Interrupt>::IRQ;
-                            $crate::interrupt::clic::enable_interrupt(irq_num);
-                        )*
-
-                        // 7. Enable global interrupts
-                        ::riscv::interrupt::enable();
-                    }
-                }
-
-            }
-
-            // Export C ABI function for startup code (pbp.rs) to call
-            #[unsafe(no_mangle)]
-            pub unsafe extern "C" fn _init_vector_table() {
-                unsafe { $name::init_vector_table(); }
-            }
-
-            // 8. Binding constraints
-            $(
-                unsafe impl $crate::interrupt::clic::typelevel::Binding<
-                    $crate::interrupt::clic::typelevel::$irq,
-                    $handler
-                > for $name {}
-            )*
+    #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
+    unsafe {
+        unsafe extern "C" {
+            fn AlignedTrapHandler();
         }
-    };
+        let trap_addr = (AlignedTrapHandler as *const () as usize & !0x3) | 3;
+        core::arch::asm!("csrw mtvec, {}", in(reg) trap_addr);
+    }
+
+    unsafe {
+        clic_init();
+        mask_all_interrupts();
+    }
+
+    let default_addr = default_irq_handler as *const () as usize as u32;
+    unsafe {
+        let table = &mut *VECTOR_TABLE.0.get();
+        table.fill(default_addr);
+    }
+
+    #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
+    unsafe {
+        let vt_addr = VECTOR_TABLE.0.get() as usize;
+        core::arch::asm!("csrw 0x307, {}", in(reg) vt_addr);
+    }
+
+    fence(Ordering::SeqCst);
+
+    #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
+    unsafe {
+        riscv::interrupt::enable();
+    }
+}
+
+/// Install handler `H` into `VECTOR_TABLE[I::IRQ]` and configure its CLIC attributes.
+///
+/// # Safety
+/// Must be called after [`init_vector_table`] on a CLIC SoC.
+pub unsafe fn register<I: super::InterruptSource, H: super::Handler<I>>() {
+    let irq = I::IRQ;
+    let idx = irq as usize;
+    assert!(idx < MAX_INTERRUPTS, "CLIC interrupt index out of range");
+    let entry = irq_trampoline::<I, H> as *const () as usize as u32;
+
+    critical_section::with(|_| {
+        let slot_addr = unsafe {
+            let table = &mut *VECTOR_TABLE.0.get();
+            table[idx] = entry;
+            core::ptr::addr_of!(table[idx]) as usize
+        };
+        unsafe {
+            crate::cache::dcache_clean_invalidate_range(slot_addr, core::mem::size_of::<u32>());
+            set_priority(irq, 255);
+            set_interrupt_attribute(irq, true, 0, 0);
+        }
+        #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
+        unsafe {
+            core::arch::asm!("fence.i");
+        }
+    });
 }
 
 #[cfg(feature = "d12x")]
-clic_interrupt_mod! {
+define_interrupt_mod! {
     CPU_TIMER = 7,
     DCE = 31,
     DMA = 32,
@@ -321,8 +261,11 @@ clic_interrupt_mod! {
     CIR = 95,
 }
 
-#[cfg(feature = "d13x")]
-clic_interrupt_mod! {
+#[cfg(any(
+    feature = "d13x",
+    not(any(feature = "d12x", feature = "g73x", feature = "m6800"))
+))]
+define_interrupt_mod! {
     CPU_TIMER = 7,
     SYSCFG = 16,
     CPM = 20,
@@ -392,7 +335,7 @@ clic_interrupt_mod! {
 }
 
 #[cfg(feature = "g73x")]
-clic_interrupt_mod! {
+define_interrupt_mod! {
     CPU_TIMER = 7,
     SYSCFG = 16,
     CPM = 20,
@@ -462,7 +405,7 @@ clic_interrupt_mod! {
 }
 
 #[cfg(feature = "m6800")]
-clic_interrupt_mod! {
+define_interrupt_mod! {
     CPU_TIMER = 7,
     SYSCFG = 16,
     CPM = 20,
