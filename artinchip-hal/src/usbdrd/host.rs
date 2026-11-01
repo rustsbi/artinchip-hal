@@ -7,4 +7,5 @@
 pub mod host_register;
 mod instance;
 
+pub use super::{UsbConfig, UsbPads};
 pub use instance::UsbHost;

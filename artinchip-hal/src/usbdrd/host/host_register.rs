@@ -1,4 +1,7 @@
 //! USBDRD host register blocks and registers.
+//!
+//! # Deduced IP Architecture (unoffical)
+//! - **IP**: STMicroelectronics EHCI 2.0 + OHCI 1.1 companion host controller.
 
 use volatile_register::{RO, RW};
 

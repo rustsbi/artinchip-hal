@@ -1,50 +1,35 @@
-//! Official `aiburnfw`-style storage shell (`RUN_SHELL_STR`).
+//! `aiburnfw`-compatible storage shell (`RUN_SHELL_STR`, opcode `0x05`).
 //!
-//! When the device reports `boot_stage = 2` ("Storage R/W Mode", `GET_HWINFO`
-//! offset 40) the host tool programs flash with **shell commands** sent as UPG
-//! `RUN_SHELL_STR` (0x05) instead of using the FWC channel. This is the path the
-//! vendor RAM helper `bin/aiburnfw_d13x.bin` implements, and the one observed
-//! writing flash on the wire.
-//!
-//! Command set (recovered from `aiburnfw_d13x.bin` and the USB capture):
+//! When `GET_HWINFO` reports `boot_stage = 2` ("Storage R/W Mode"), the host tool
+//! drives flash operations via ASCII `bd*` shell commands instead of the FWC channel:
 //!
 //! ```text
 //! get_bootdevice <addr> <len>          fill a device table at <addr>
 //! bdopen  <id>                         open storage device
 //! bdclose <id>                         close storage device
-//! bdcfg   <id> ...                     (accepted, no-op)
-//! bderase <id> <start> <size>          erase
-//! bdwrite <id> <offset> <len> <buf>    program flash from a RAM buffer
-//! bdread  <id> <offset> <len> <buf>    read flash into a RAM buffer
-//! efuse ... / aicupg ...               (accepted, no-op)
+//! bdcfg   <id> ...                     accepted, no-op
+//! bderase <id> <start> <size>          erase byte range
+//! bdwrite <id> <offset> <len> <buf>    program flash from staging buffer
+//! bdread  <id> <offset> <len> <buf>    read flash into staging buffer
+//! efuse ... / aicupg ... / reset       accepted lifecycle commands
 //! ```
-//!
-//! `<buf>` is the RAM window handed to the host by `GET_MEM_BUF`; the host fills
-//! it with `WRITE` (0x02) and we move it to/from flash here.
 
 use core::str::Split;
 
 use log::error;
 
-use super::storage::Storage;
+use super::storage::StorageBackend as Storage;
 
-/// Whether a shell line programs flash, as opposed to only looking at it.
-///
-/// The storage path's `get_bootdevice` / `bdopen` / `bdcfg` / `bdread` are the
-/// host inspecting the device; only `bderase` / `bdwrite` change it.
+/// Return whether a shell line mutates flash (`bderase` / `bdwrite`).
 pub(super) fn is_write(line: &str) -> bool {
     line.starts_with("bderase") || line.starts_with("bdwrite")
 }
 
-/// Run one command line. Returns `true` on success (reported as `UPG_RESP_OK`).
+/// Execute one shell command line against `storage`.
 pub(super) fn run(storage: &mut dyn Storage, line: &str) -> bool {
     let mut args = line.split(' ');
     let command = args.next().unwrap_or("");
     match command {
-        // Device lifecycle: our media is always open, so these are no-ops.
-        // `reset` is not a no-op: the engine sees it and hands the board over to
-        // its application (see `Engine::reset_requested`); answering OK here is
-        // what lets it reply before that happens.
         "bdopen" | "bdclose" | "bdcfg" | "efuse" | "aicupg" | "reset" => true,
 
         "bderase" => {
@@ -65,8 +50,7 @@ pub(super) fn run(storage: &mut dyn Storage, line: &str) -> bool {
                 return false;
             };
             let written = storage.write_from_scratch(offset, scratch_off, len);
-            storage.flush();
-            written == len
+            written == len && storage.flush()
         }
 
         "bdread" => {
@@ -95,14 +79,12 @@ pub(super) fn run(storage: &mut dyn Storage, line: &str) -> bool {
         }
 
         _ => {
-            // `aiburnfw` answers "Invalid command: %s" and reports failure.
             error!("shell: unsupported command {line:?}");
             false
         }
     }
 }
 
-/// Read exactly `N` following arguments as numbers.
 fn take<const N: usize>(args: &mut Split<'_, char>) -> Option<[u64; N]> {
     let mut out = [0u64; N];
     for slot in out.iter_mut() {
@@ -111,7 +93,6 @@ fn take<const N: usize>(args: &mut Split<'_, char>) -> Option<[u64; N]> {
     Some(out)
 }
 
-/// Parse a decimal or `0x`-prefixed hexadecimal number.
 fn number(token: &str) -> Option<u64> {
     let token = token.trim();
     match token
@@ -123,7 +104,6 @@ fn number(token: &str) -> Option<u64> {
     }
 }
 
-/// Translate a host RAM address into an offset/length inside our staging buffer.
 fn window(storage: &dyn Storage, addr: u64, len: u64) -> Option<(usize, usize)> {
     let base = storage.scratch_addr() as u64;
     let size = storage.scratch_len() as u64;
@@ -134,27 +114,7 @@ fn window(storage: &dyn Storage, addr: u64, len: u64) -> Option<(usize, usize)> 
     Some((off as usize, len.min(size - off) as usize))
 }
 
-/// Best-effort `get_bootdevice` reply.
-///
-/// The vendor helper returns a small storage-device table (one entry per
-/// backend) which the host reads back with `READ`. Only the scalar header layout
-/// could be identified from the wire capture; the referenced strings are placed
-/// inside the same buffer here so that every pointer stays inside the RAM window
-/// the host already knows about.
-///
-/// Header fields identified from the capture (offsets from the start of the
-/// reply):
-///
-/// ```text
-/// 0x00 u32 device count (1)
-/// 0x08 u32 table entries (2)
-/// 0x18 u32 erase size
-/// 0x1C u32 block size
-/// 0x20 u32 total size
-/// ```
-///
-/// This is the one reply whose full layout is not reversed yet; see the notes in
-/// `docs/PBP-BOOTLOADER-REPORT.md`.
+/// Populate the `get_bootdevice` storage-descriptor reply inside the staging buffer.
 fn fill_bootdevice(storage: &mut dyn Storage, scratch_off: usize, len: usize) {
     let base = storage.scratch_addr();
     let block = storage.block_size();

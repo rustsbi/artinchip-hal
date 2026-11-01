@@ -1,4 +1,7 @@
 //! USBDRD device register blocks and registers.
+//!
+//! # Deduced IP Architecture (unoffical)
+//! - **IP**: Synopsys DesignWare Cores USB 2.0 Hi-Speed OTG Controller (DWC2).
 
 use volatile_register::{RO, RW};
 

@@ -17,7 +17,8 @@
 use heapless::Vec;
 use log::{debug, error};
 
-use super::storage::Storage;
+use super::shell;
+use super::storage::StorageBackend;
 
 /// `"UPGC"` request magic.
 pub const UPG_CMD_MAGIC: u32 = 0x4347_5055;
@@ -216,13 +217,12 @@ impl Default for FwcState {
 
 /// Protocol engine over a [`Storage`] sink.
 pub struct Engine<'a> {
-    storage: &'a mut dyn Storage,
+    storage: &'a mut dyn StorageBackend,
     request: Vec<u8, REQ_MAX>,
     request_total: usize,
     response: Vec<u8, RESP_MAX>,
     response_pos: usize,
     fwc: FwcState,
-    cfg_mode: u8,
     partition_table: &'static str,
     last_status: u8,
     /// Set once the host does something that changes state, as opposed to only
@@ -249,7 +249,7 @@ pub struct Engine<'a> {
 
 impl<'a> Engine<'a> {
     /// Create an engine on top of `storage`.
-    pub fn new(storage: &'a mut dyn Storage, partition_table: &'static str) -> Self {
+    pub fn new(storage: &'a mut dyn StorageBackend, partition_table: &'static str) -> Self {
         Self {
             storage,
             request: Vec::new(),
@@ -257,7 +257,6 @@ impl<'a> Engine<'a> {
             response: Vec::new(),
             response_pos: 0,
             fwc: FwcState::default(),
-            cfg_mode: 0,
             partition_table,
             last_status: RESP_OK,
             host_upgrading: false,
@@ -302,12 +301,12 @@ impl<'a> Engine<'a> {
                 // Collect the 16-byte UPGC header.
                 let want = UPG_HEADER_SIZE - self.request.len();
                 let take = want.min(data.len() - offset);
-                append(&mut self.request, &data[offset..offset + take]);
+                Self::append(&mut self.request, &data[offset..offset + take]);
                 offset += take;
                 if self.request.len() < UPG_HEADER_SIZE {
                     break;
                 }
-                match parse_header(&self.request) {
+                match Self::parse_header(&self.request) {
                     Some((command, data_length, _)) => {
                         if command == CMD_SEND_FWC_DATA {
                             // Not a self-contained frame: switch to streaming and
@@ -333,14 +332,9 @@ impl<'a> Engine<'a> {
                         }
                     }
                     None => {
-                        // A packet that does not carry a command header is the
-                        // continuation of a streaming command, but no streamed
-                        // command is in flight (the payload case is handled
-                        // above), so the host and device are out of sync.
-                        error!(
-                            "aic_upg: payload continuation +{} without known frame",
-                            data.len()
-                        );
+                        // Header-less packet outside a streamed payload: real
+                        // framing error. Keep the failure path, but stay quiet
+                        // (the host retries and the final result is what matters).
                         self.fail();
                         self.reset_request();
                         return self.last_status;
@@ -349,7 +343,7 @@ impl<'a> Engine<'a> {
             } else if self.request.len() < self.request_total {
                 let want = self.request_total - self.request.len();
                 let take = want.min(data.len() - offset);
-                append(&mut self.request, &data[offset..offset + take]);
+                Self::append(&mut self.request, &data[offset..offset + take]);
                 offset += take;
             }
 
@@ -379,21 +373,6 @@ impl<'a> Engine<'a> {
         len
     }
 
-    /// Whether unread response bytes are pending.
-    pub fn has_response(&self) -> bool {
-        self.response_pos < self.response.len()
-    }
-
-    /// Status reported by the last [`Self::transport_write`].
-    pub fn last_status(&self) -> u8 {
-        self.last_status
-    }
-
-    /// Read access to the underlying storage.
-    pub fn storage(&self) -> &dyn Storage {
-        self.storage
-    }
-
     /// Drop any in-flight request/response and firmware state.
     ///
     /// Called after a bus reset: the controller aborts queued transfers, so a
@@ -403,7 +382,6 @@ impl<'a> Engine<'a> {
         self.response.clear();
         self.response_pos = 0;
         self.fwc = FwcState::default();
-        self.cfg_mode = 0;
         self.last_status = RESP_OK;
         self.stream_remaining = 0;
     }
@@ -420,22 +398,22 @@ impl<'a> Engine<'a> {
     fn begin_response(&mut self, command: u8) {
         self.response.clear();
         self.response_pos = 0;
-        push_header(&mut self.response, UPG_RESP_MAGIC, command, RESP_OK, 0);
+        Self::push_header(&mut self.response, UPG_RESP_MAGIC, command, RESP_OK, 0);
     }
 
     fn finish_response(&mut self, data: &[u8]) -> u8 {
         if self.response.len() + data.len() > RESP_MAX {
             self.response.clear();
             self.response_pos = 0;
-            push_header(&mut self.response, 0, RESP_FAIL, 0, 0);
+            Self::push_header(&mut self.response, 0, RESP_FAIL, 0, 0);
             return RESP_FAIL;
         }
         let data_len = data.len() as u32;
-        append(&mut self.response, data);
+        Self::append(&mut self.response, data);
         // Patch the data length + checksum into the response header.
         let command = self.response[6];
         let status = self.response[7];
-        let header = build_header(UPG_RESP_MAGIC, command, status, data_len);
+        let header = Self::build_header(UPG_RESP_MAGIC, command, status, data_len);
         self.response[..UPG_HEADER_SIZE].copy_from_slice(&header);
         RESP_OK
     }
@@ -443,7 +421,7 @@ impl<'a> Engine<'a> {
     fn fail_response(&mut self, command: u8) -> u8 {
         self.response.clear();
         self.response_pos = 0;
-        push_header(&mut self.response, UPG_RESP_MAGIC, command, RESP_FAIL, 0);
+        Self::push_header(&mut self.response, UPG_RESP_MAGIC, command, RESP_FAIL, 0);
         RESP_FAIL
     }
 
@@ -504,6 +482,10 @@ impl<'a> Engine<'a> {
 
     /// Queue the single response that ends a `SEND_FWC_DATA`.
     fn finish_fwc_stream(&mut self) {
+        if self.fwc.burn_result == 0 && !self.storage.flush() {
+            error!("aic_upg: failed to flush the last SEND_FWC_DATA block");
+            self.fwc.burn_result = 1;
+        }
         if self.fwc.burn_result != 0 {
             self.fail_response(CMD_SEND_FWC_DATA);
         } else {
@@ -543,7 +525,7 @@ impl<'a> Engine<'a> {
     fn unsupported_response(&mut self, command: u8) -> u8 {
         self.response.clear();
         self.response_pos = 0;
-        push_header(&mut self.response, UPG_RESP_MAGIC, command, RESP_FAIL, 0);
+        Self::push_header(&mut self.response, UPG_RESP_MAGIC, command, RESP_FAIL, 0);
         let _ = self.finish_response(&[0u8; HWINFO_SIZE]);
         RESP_OK
     }
@@ -554,7 +536,7 @@ impl<'a> Engine<'a> {
     }
 
     fn execute_inner(&mut self, frame: &[u8]) -> u8 {
-        let Some((command, data_length, _)) = parse_header(frame) else {
+        let Some((command, data_length, _)) = Self::parse_header(frame) else {
             return RESP_FAIL;
         };
         let data = &frame[UPG_HEADER_SIZE..];
@@ -563,7 +545,7 @@ impl<'a> Engine<'a> {
         }
         let data = &data[..data_length as usize];
 
-        if !is_status_query(command) {
+        if !Self::is_status_query(command) {
             self.host_upgrading = true;
         }
 
@@ -574,7 +556,7 @@ impl<'a> Engine<'a> {
             }
             CMD_GET_TRACEINFO => self.unsupported_response(command),
             CMD_WRITE => {
-                let Some((addr, len)) = read_u32_pair(data) else {
+                let Some((addr, len)) = Self::read_u32_pair(data) else {
                     return self.fail_response(command);
                 };
                 let payload = &data[8..];
@@ -592,7 +574,7 @@ impl<'a> Engine<'a> {
                 self.finish_response(&[])
             }
             CMD_READ => {
-                let Some((addr, len)) = read_u32_pair(data) else {
+                let Some((addr, len)) = Self::read_u32_pair(data) else {
                     return self.fail_response(command);
                 };
                 let scratch = self.storage.scratch();
@@ -607,6 +589,24 @@ impl<'a> Engine<'a> {
                 self.begin_response(command);
                 self.finish_response(&payload)
             }
+            CMD_RUN_SHELL_STR => {
+                // Official "Storage R/W" personality: `bd*` shell commands.
+                let Some(text) = Self::shell_line(data) else {
+                    return self.fail_response(command);
+                };
+                if shell::is_write(text) {
+                    self.host_upgrading = true;
+                }
+                if text.split(' ').next() == Some("reset") {
+                    self.reset_requested = true;
+                }
+                if shell::run(&mut *self.storage, text) {
+                    self.begin_response(command);
+                    self.finish_response(&[])
+                } else {
+                    self.fail_response(command)
+                }
+            }
             CMD_GET_MEM_BUF => {
                 let addr = self.storage.scratch_addr();
                 self.begin_response(command);
@@ -617,14 +617,13 @@ impl<'a> Engine<'a> {
                 self.finish_response(&[])
             }
             CMD_SET_UPG_CFG => {
-                if data.len() >= 32 {
-                    self.cfg_mode = data[0];
-                }
                 self.begin_response(command);
                 self.finish_response(&[])
             }
             CMD_SET_UPG_END => {
-                self.storage.flush();
+                if !self.storage.flush() {
+                    return self.fail_response(command);
+                }
                 self.begin_response(command);
                 self.finish_response(&[])
             }
@@ -641,12 +640,14 @@ impl<'a> Engine<'a> {
                 if &meta[..4] != b"META" {
                     return self.fail_response(command);
                 }
-                self.storage.flush();
+                if !self.storage.flush() {
+                    return self.fail_response(command);
+                }
                 self.fwc.meta.copy_from_slice(meta);
                 self.fwc.meta_valid = true;
                 // Target components name a partition; updater/`run` components
                 // leave it empty and are not programmed into flash.
-                let partition = meta_str(&self.fwc.meta, 0x48, 64);
+                let partition = Self::meta_str(&self.fwc.meta, 0x48, 64);
                 let size = u32::from_le_bytes(self.fwc.meta[0x8C..0x90].try_into().unwrap());
                 self.fwc.target = if partition.is_empty() {
                     None
@@ -656,24 +657,24 @@ impl<'a> Engine<'a> {
                         None => {
                             error!(
                                 "aic_upg: FWC meta name=\"{}\" partition=\"{}\" -> UNKNOWN partition",
-                                meta_str(&self.fwc.meta, 0x08, 64),
+                                Self::meta_str(&self.fwc.meta, 0x08, 64),
                                 partition
                             );
                             return self.fail_response(command);
                         }
                     }
                 };
-                debug!(
-                    "aic_upg: FWC meta name=\"{}\" partition=\"{}\" size={} -> flash offset {:?}",
-                    meta_str(&self.fwc.meta, 0x08, 64),
-                    partition,
-                    size,
-                    self.fwc.target
-                );
                 self.fwc.written = 0;
                 self.fwc.crc = 0;
                 self.fwc.burn_result = 0;
                 self.fwc.run_result = 0;
+                if let Some(offset) = self.fwc.target {
+                    debug!(
+                        "aic_upg: {} -> {}, {size} B @ {offset:#07x}",
+                        Self::meta_str(&self.fwc.meta, 0x08, 64),
+                        partition
+                    );
+                }
                 self.begin_response(command);
                 self.finish_response(&[])
             }
@@ -694,18 +695,20 @@ impl<'a> Engine<'a> {
                 self.finish_response(&[])
             }
             CMD_GET_FWC_CRC => {
-                self.storage.flush();
-                // Read back what is actually in flash: this is the decisive
-                // evidence that the write reached the media.
-                let mut probe = [0u8; 16];
-                let base = self.fwc.target.unwrap_or(0);
-                let n = self.storage.read(base, &mut probe);
-                debug!(
-                    "aic_upg: flushed, wrote {} bytes, flash[{:#x}..] = {}",
-                    self.fwc.written,
-                    base,
-                    Hex(&probe[..n])
-                );
+                if !self.storage.flush() {
+                    return self.fail_response(command);
+                }
+                if let Some(base) = self.fwc.target {
+                    let mut probe = [0u8; 16];
+                    let n = self.storage.read(base, &mut probe);
+                    debug!(
+                        "aic_upg: {}",
+                        HexDump {
+                            base: base as u32,
+                            data: &probe[..n],
+                        }
+                    );
+                }
                 self.begin_response(command);
                 self.finish_response(&self.fwc.crc.to_le_bytes())
             }
@@ -737,7 +740,7 @@ impl<'a> Engine<'a> {
                 self.finish_response(table.as_bytes())
             }
             CMD_READ_FWC_DATA => {
-                let Some((offset, len)) = read_u32_pair(data) else {
+                let Some((offset, len)) = Self::read_u32_pair(data) else {
                     return self.fail_response(command);
                 };
                 let mut buf = [0u8; 512];
@@ -766,37 +769,14 @@ impl<'a> Engine<'a> {
                 }
                 let start = u64::from_le_bytes(data[0..8].try_into().unwrap());
                 let size = u64::from_le_bytes(data[8..16].try_into().unwrap());
-                self.storage.flush();
+                if !self.storage.flush() {
+                    return self.fail_response(command);
+                }
                 if !self.storage.erase(start, size) {
                     return self.fail_response(command);
                 }
                 self.begin_response(command);
                 self.finish_response(&[])
-            }
-            CMD_RUN_SHELL_STR => {
-                // The official "Storage R/W" personality: the host drives flash
-                // with `bd*` shell commands. Only the whitelisted command set is
-                // accepted (see `super::shell`); anything else fails, so the host
-                // can never run arbitrary code on the device.
-                let Some(text) = shell_line(data) else {
-                    return self.fail_response(command);
-                };
-                // `get_bootdevice` / `bdopen` / ... are how the host looks at the
-                // device; only the commands that actually program flash count as
-                // driving an upgrade (see `host_upgrading`). `reset` ends the
-                // session instead, so the caller can boot the application.
-                if super::shell::is_write(text) {
-                    self.host_upgrading = true;
-                }
-                if text.split(' ').next() == Some("reset") {
-                    self.reset_requested = true;
-                }
-                if super::shell::run(&mut *self.storage, text) {
-                    self.begin_response(command);
-                    self.finish_response(&[])
-                } else {
-                    self.fail_response(command)
-                }
             }
             // EXEC is intentionally not implemented: a wrong jump from the host
             // must never run arbitrary code.
@@ -805,110 +785,143 @@ impl<'a> Engine<'a> {
     }
 }
 
-fn append<const N: usize>(buffer: &mut Vec<u8, N>, data: &[u8]) {
-    let _ = buffer.extend_from_slice(data);
+/// Wire-format and payload helpers.
+impl<'a> Engine<'a> {
+    fn append<const N: usize>(buffer: &mut Vec<u8, N>, data: &[u8]) {
+        let _ = buffer.extend_from_slice(data);
+    }
+
+    /// Commands the host sends just to look at the device.
+    ///
+    /// AiBurn issues these while it is merely connected (`Get device hd info`,
+    /// `Refresh the partition tree`), so they must not count as an upgrade - see
+    /// [`Engine::host_upgrading`]. Everything else, including any command we do not
+    /// know, means the host is doing something.
+    fn is_status_query(command: u8) -> bool {
+        matches!(
+            command,
+            CMD_GET_HWINFO
+                | CMD_GET_TRACEINFO
+                | CMD_READ
+                | CMD_GET_MEM_BUF
+                | CMD_FREE_MEM_BUF
+                | CMD_GET_LOG_SIZE
+                | CMD_GET_LOG_DATA
+                | CMD_GET_BLOCK_SIZE
+                | CMD_GET_FWC_CRC
+                | CMD_GET_FWC_BURN_RESULT
+                | CMD_GET_FWC_RUN_RESULT
+                | CMD_GET_STORAGE_MEDIA
+                | CMD_GET_PARTITION_TABLE
+                | CMD_READ_FWC_DATA
+                | CMD_GET_STORAGE_GEOME
+        )
+    }
+
+    fn parse_header(frame: &[u8]) -> Option<(u8, u32, u32)> {
+        if frame.len() < UPG_HEADER_SIZE || &frame[..4] != b"UPGC" {
+            return None;
+        }
+        let command = frame[6];
+        let data_length = u32::from_le_bytes(frame[8..12].try_into().ok()?);
+        let checksum = u32::from_le_bytes(frame[12..16].try_into().ok()?);
+        let expected = Self::header_checksum(UPG_CMD_MAGIC, command, frame[7], data_length);
+        (checksum == expected).then_some((command, data_length, checksum))
+    }
+
+    fn header_checksum(magic: u32, command: u8, status: u8, data_length: u32) -> u32 {
+        let field = ((status as u32) << 24) | ((command as u32) << 16) | ((1u32) << 8) | 1u32;
+        magic.wrapping_add(field).wrapping_add(data_length)
+    }
+
+    fn build_header(
+        magic: u32,
+        command: u8,
+        status: u8,
+        data_length: u32,
+    ) -> [u8; UPG_HEADER_SIZE] {
+        let mut header = [0u8; UPG_HEADER_SIZE];
+        header[..4].copy_from_slice(&magic.to_le_bytes());
+        header[4] = 1; // protocol
+        header[5] = 1; // version
+        header[6] = command;
+        header[7] = status;
+        header[8..12].copy_from_slice(&data_length.to_le_bytes());
+        header[12..16].copy_from_slice(
+            &Self::header_checksum(magic, command, status, data_length).to_le_bytes(),
+        );
+        header
+    }
+
+    fn push_header<const N: usize>(
+        buffer: &mut Vec<u8, N>,
+        magic: u32,
+        command: u8,
+        status: u8,
+        data_length: u32,
+    ) {
+        let header = Self::build_header(magic, command, status, data_length);
+        Self::append(buffer, &header);
+    }
+
+    /// Decode a `RUN_SHELL_STR` payload: `u32 length` + ASCII command line.
+    fn shell_line(data: &[u8]) -> Option<&str> {
+        let len = u32::from_le_bytes(data.get(..4)?.try_into().ok()?) as usize;
+        let text = data.get(4..4 + len)?;
+        core::str::from_utf8(text).ok()
+    }
+
+    fn read_u32_pair(data: &[u8]) -> Option<(u32, u32)> {
+        if data.len() < 8 {
+            return None;
+        }
+        Some((
+            u32::from_le_bytes(data[0..4].try_into().ok()?),
+            u32::from_le_bytes(data[4..8].try_into().ok()?),
+        ))
+    }
+
+    /// Read a NUL-terminated string field out of the 512-byte `fwc_meta`.
+    fn meta_str(meta: &[u8; 512], offset: usize, len: usize) -> &str {
+        let field = &meta[offset..offset + len];
+        let end = field.iter().position(|&b| b == 0).unwrap_or(field.len());
+        core::str::from_utf8(&field[..end]).unwrap_or("")
+    }
 }
 
-/// Commands the host sends just to look at the device.
+/// Offset-prefixed hex dump with an ASCII column.
 ///
-/// AiBurn issues these while it is merely connected (`Get device hd info`,
-/// `Refresh the partition tree`), so they must not count as an upgrade - see
-/// [`Engine::host_upgrading`]. Everything else, including any command we do not
-/// know, means the host is doing something.
-fn is_status_query(command: u8) -> bool {
-    matches!(
-        command,
-        CMD_GET_HWINFO
-            | CMD_GET_TRACEINFO
-            | CMD_READ
-            | CMD_GET_MEM_BUF
-            | CMD_FREE_MEM_BUF
-            | CMD_GET_LOG_SIZE
-            | CMD_GET_LOG_DATA
-            | CMD_GET_BLOCK_SIZE
-            | CMD_GET_FWC_CRC
-            | CMD_GET_FWC_BURN_RESULT
-            | CMD_GET_FWC_RUN_RESULT
-            | CMD_GET_STORAGE_MEDIA
-            | CMD_GET_PARTITION_TABLE
-            | CMD_READ_FWC_DATA
-            | CMD_GET_STORAGE_GEOME
-            | CMD_RUN_SHELL_STR
-    )
+/// The first row continues the log line (`aic_upg: 00080000: 41 49 43 20 ... |
+/// AIC ...|`); later rows start a new line, so a 16-byte head stays one short
+/// line.
+struct HexDump<'a> {
+    base: u32,
+    data: &'a [u8],
 }
 
-fn parse_header(frame: &[u8]) -> Option<(u8, u32, u32)> {
-    if frame.len() < UPG_HEADER_SIZE || &frame[..4] != b"UPGC" {
-        return None;
-    }
-    let command = frame[6];
-    let data_length = u32::from_le_bytes(frame[8..12].try_into().ok()?);
-    let checksum = u32::from_le_bytes(frame[12..16].try_into().ok()?);
-    let expected = header_checksum(UPG_CMD_MAGIC, command, frame[7], data_length);
-    (checksum == expected).then_some((command, data_length, checksum))
-}
-
-fn header_checksum(magic: u32, command: u8, status: u8, data_length: u32) -> u32 {
-    let field = ((status as u32) << 24) | ((command as u32) << 16) | ((1u32) << 8) | 1u32;
-    magic.wrapping_add(field).wrapping_add(data_length)
-}
-
-fn build_header(magic: u32, command: u8, status: u8, data_length: u32) -> [u8; UPG_HEADER_SIZE] {
-    let mut header = [0u8; UPG_HEADER_SIZE];
-    header[..4].copy_from_slice(&magic.to_le_bytes());
-    header[4] = 1; // protocol
-    header[5] = 1; // version
-    header[6] = command;
-    header[7] = status;
-    header[8..12].copy_from_slice(&data_length.to_le_bytes());
-    header[12..16]
-        .copy_from_slice(&header_checksum(magic, command, status, data_length).to_le_bytes());
-    header
-}
-
-fn push_header<const N: usize>(
-    buffer: &mut Vec<u8, N>,
-    magic: u32,
-    command: u8,
-    status: u8,
-    data_length: u32,
-) {
-    let header = build_header(magic, command, status, data_length);
-    append(buffer, &header);
-}
-
-fn read_u32_pair(data: &[u8]) -> Option<(u32, u32)> {
-    if data.len() < 8 {
-        return None;
-    }
-    Some((
-        u32::from_le_bytes(data[0..4].try_into().ok()?),
-        u32::from_le_bytes(data[4..8].try_into().ok()?),
-    ))
-}
-
-/// Decode a `RUN_SHELL_STR` payload: `u32 length` followed by the ASCII command
-/// line (no NUL terminator), as sent by the host tool.
-fn shell_line(data: &[u8]) -> Option<&str> {
-    let len = u32::from_le_bytes(data.get(..4)?.try_into().ok()?) as usize;
-    let text = data.get(4..4 + len)?;
-    core::str::from_utf8(text).ok()
-}
-
-/// Read a NUL-terminated string field out of the 512-byte `fwc_meta`.
-fn meta_str(meta: &[u8; 512], offset: usize, len: usize) -> &str {
-    let field = &meta[offset..offset + len];
-    let end = field.iter().position(|&b| b == 0).unwrap_or(field.len());
-    core::str::from_utf8(&field[..end]).unwrap_or("")
-}
-
-/// Lower-case hex formatter for log output.
-struct Hex<'a>(&'a [u8]);
-
-impl core::fmt::Display for Hex<'_> {
+impl core::fmt::Display for HexDump<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        for byte in self.0 {
-            write!(f, "{:02x}", byte)?;
+        for (row, chunk) in self.data.chunks(16).enumerate() {
+            if row != 0 {
+                f.write_str("\n")?;
+            }
+            write!(f, "{:08X}: ", self.base + (row * 16) as u32)?;
+            for byte in chunk {
+                write!(f, "{:02X} ", byte)?;
+            }
+            for _ in chunk.len()..16 {
+                write!(f, "   ")?;
+            }
+            write!(f, " |")?;
+            for &byte in chunk {
+                let ch = if (0x20..=0x7e).contains(&byte) {
+                    byte as char
+                } else {
+                    '.'
+                };
+                write!(f, "{ch}")?;
+            }
+            write!(f, "|")?;
         }
         Ok(())
     }
