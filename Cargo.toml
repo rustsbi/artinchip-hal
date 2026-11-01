@@ -11,6 +11,7 @@ members = [
     "examples/pbp/pbp-dma",
     "examples/pbp/pbp-pwm",
     "examples/pbp/pbp-psram",
+    "examples/pbp/pbp-dram",
     "examples/pbp/pbp-common",
     "examples/pbp/pbp-async-uart",
     "examples/app/app-bootloader",
