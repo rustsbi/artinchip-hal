@@ -25,6 +25,7 @@ pub mod clic;
 pub mod clint;
 pub mod cmu;
 pub mod dma;
+pub mod dram;
 pub mod gpio;
 pub mod gtc;
 pub mod i2c;
@@ -58,6 +59,7 @@ pub mod prelude {
 /// ArtInChip HAL traits.
 pub mod traits {
     pub use crate::dma::DmaExt as _;
+    pub use crate::dram::DramExt as _;
     pub use crate::gtc::GtcExt as _;
     pub use crate::pwm::PwmExt as _;
     pub use crate::rtc::RtcExt as _;
@@ -78,6 +80,7 @@ pub mod instances {
     pub use crate::clint::{ClintV1, ClintV2};
     pub use crate::cmu::Cmu;
     pub use crate::dma::Dma;
+    pub use crate::dram::{Dram, DramDriver};
     pub use crate::gtc::Gtc;
     pub use crate::i2c::I2c;
     pub use crate::pwm::{PwmChannel, PwmChannels};
