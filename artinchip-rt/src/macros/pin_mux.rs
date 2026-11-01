@@ -17,7 +17,9 @@ macro_rules! gpio {
                 const fn __new() -> Self {
                     Self {
                         $(
-                            [<p $G:lower $N>]: unsafe {crate::gpio::GpioPad::__new(&*GPIO::ptr())},
+                            [<p $G:lower $N>]: {
+                                unsafe { crate::gpio::GpioPad::__new(&*GPIO::ptr()) }
+                            },
                         )*
                     }
                 }

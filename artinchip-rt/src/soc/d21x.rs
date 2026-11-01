@@ -6,6 +6,12 @@ use artinchip_hal::instances::*;
 use embedded_time::rate::Hertz;
 use paste::paste;
 
+/// Machine timer (`mtime`/`time` CSR) frequency.
+pub const MACHINE_TIMER_HZ: u32 = 4_000_000;
+
+/// Base address of the DRAM window (`DRAM_BASE`): 1 GiB of decoded address space.
+pub const DRAM_BASE: usize = 0x4000_0000;
+
 /// Default D21x clock tree.
 pub const fn default_clk_tree() -> ClockTree {
     ClockTree::new(
@@ -23,6 +29,8 @@ pub struct Peripherals {
     pub dma: Dma,
     /// Crypto Engine.
     pub ce: Ce,
+    /// USB device controller (the host's upgrade channel).
+    pub usb_dev: UsbDev,
     /// Expanded Serial Peripheral Interface.
     pub xspi: Xspi,
     /// Quad Serial Peripheral Interface 0.
@@ -38,9 +46,11 @@ pub struct Peripherals {
     /// Secure Digital Host Controller 1.
     pub sdmc1: Sdmc<1>,
     /// System Configuration.
-    pub syscfg: SysCfg,
+    pub syscfg: SysCfg<V2>,
     /// Clock Manage Unit.
     pub cmu: Cmu,
+    /// DRAM controller and PHY.
+    pub dram: Dram,
     /// Serial Peripheral Interface Encryption.
     pub spi_enc: SpiEnc,
     /// AXI Configuration.
@@ -96,7 +106,7 @@ pub struct Peripherals {
     /// Pulse Width Modulation.
     pub pwm: PwmChannels,
     /// Core Local Interrupt.
-    pub clint: Clint,
+    pub clint: ClintV2,
 }
 
 soc! {
@@ -104,6 +114,8 @@ soc! {
     pub struct DMA => 0x10000000, artinchip_hal::dma::RegisterBlock;
     /// Crypto Engine.
     pub struct CE => 0x10020000, artinchip_hal::ce::RegisterBlock;
+    /// USB device controller.
+    pub struct USB_DEV => 0x10200000, artinchip_hal::usbdrd::device::dev_register::RegisterBlock;
     /// Expanded Serial Peripheral Interface.
     pub struct XSPI => 0x10300000, artinchip_hal::xspi::RegisterBlock;
     /// Quad Serial Peripheral Interface 0.
@@ -119,13 +131,17 @@ soc! {
     /// Secure Digital Host Controller 1.
     pub struct SDMC1 => 0x10450000, artinchip_hal::sdmc::RegisterBlock;
     /// System Configuration.
-    pub struct SYSCFG => 0x18000000, artinchip_hal::sys_cfg::RegisterBlock;
+    pub struct SYSCFG => 0x18000000, artinchip_hal::sys_cfg::register_v2::RegisterBlock;
     /// Clock Manage Unit.
     pub struct CMU => 0x18020000, artinchip_hal::cmu::RegisterBlock;
     /// Serial Peripheral Interface Encryption.
     pub struct SPI_ENC => 0x18100000, artinchip_hal::spi_enc::RegisterBlock;
+    /// DRAM controller (`DDRC_BASE`).
+    pub struct DRAM_CTL => 0x18400000, artinchip_hal::dram::ControllerRegisterBlock;
     /// AXI Configuration.
     pub struct AXICFG => 0x184FE000, artinchip_hal::axi_cfg::RegisterBlock;
+    /// DRAM PHY (`DDR_PHY_BASE`).
+    pub struct DRAM_PHY => 0x18500000, artinchip_hal::dram::PhyRegisterBlock;
     /// General Purpose Input/Output.
     pub struct GPIO => 0x18700000, artinchip_hal::gpio::RegisterBlock;
     /// Universal Asynchronous Receiver-Transmitter 0.
@@ -173,6 +189,7 @@ impl Peripherals {
         Self {
             dma: Dma::__new(DMA::ptr()),
             ce: Ce::__new(CE::ptr()),
+            usb_dev: UsbDev::__new(USB_DEV::ptr()),
             xspi: Xspi::__new(XSPI::ptr()),
             qspi0: Qspi::__new(QSPI0::ptr()),
             qspi1: Qspi::__new(QSPI1::ptr()),
@@ -180,8 +197,9 @@ impl Peripherals {
             qspi3: Qspi::__new(QSPI3::ptr()),
             sdmc0: Sdmc::__new(SDMC0::ptr()),
             sdmc1: Sdmc::__new(SDMC1::ptr()),
-            syscfg: SysCfg::__new(SYSCFG::ptr()),
+            syscfg: SysCfg::<V2>::__new(SYSCFG::ptr()),
             cmu: Cmu::__new(CMU::ptr()),
+            dram: Dram::__new(DRAM_CTL::ptr(), DRAM_PHY::ptr(), DRAM_BASE),
             spi_enc: SpiEnc::__new(SPI_ENC::ptr()),
             axi_cfg: AxiCfg::__new(AXICFG::ptr()),
             gpioa: GpioAPads::__new(),
@@ -209,7 +227,7 @@ impl Peripherals {
             i2c1: I2c::__new(I2C1::ptr()),
             i2c2: I2c::__new(I2C2::ptr()),
             pwm: PwmChannels::__new(PWM::ptr()),
-            clint: Clint::__new(CLINT::ptr()),
+            clint: ClintV2::__new(CLINT::ptr()),
         }
     }
 
@@ -239,6 +257,12 @@ gpio!(GpioFPads, 'F', [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]);
 gpio!(GpioGPads, 'G', [0,1,2,3]);
 #[rustfmt::skip]
 gpio!(GpioUPads, 'U', [0,1,2,3]);
+
+// USB pin mux for D21x series.
+usb_dm!(0, ('U', 0, 2));
+usb_dp!(0, ('U', 1, 2));
+usb_dm!(1, ('U', 2, 2));
+usb_dp!(1, ('U', 3, 2));
 
 // QSPI pin mux for D21x series.
 qspi_sck!(0, ('B', 5, 3), ('E', 16, 3)); // QSPI0

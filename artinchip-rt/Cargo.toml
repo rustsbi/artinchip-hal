@@ -10,18 +10,36 @@ authors = [
 [dependencies]
 artinchip-rt-macros = { version = "0.0.0", path = "macros" }
 artinchip-hal = { version = "0.0.0", path = "../artinchip-hal" }
+critical-section = "1.2.0"
+# Built without platform shims: `crate::app` owns the executor loop and `__pender`.
+embassy-executor = { version = "0.10.0", optional = true, default-features = false }
+embassy-time = { version = "0.5.1", optional = true, default-features = false }
+embassy-time-driver = { version = "0.2.2", optional = true }
+embassy-time-queue-utils = { version = "0.3.2", optional = true, features = [
+    "generic-queue-32",
+] }
 embedded-hal = "1.0.0"
 embedded-time = "0.12.1"
 riscv = { version = "0.16.1", features = ["critical-section-single-hart"] }
 paste = "1.0"
-xuantie-riscv = { git = "https://github.com/rustsbi/xuantie.git", branch = "main" }
+xuantie-riscv = { git = "https://github.com/rustsbi/xuantie.git", rev = "b0837ce0dd373481f70deab30fb139da7f8cae06" }
 log = { version = "0.4", default-features = false }
 
 [features]
-interrupts = []
+default = ["async"]
+# Retained as an optional linker-script selector for `artinchip-rt.ld`; prefer `-Tartinchip-app.ld`.
 app = []
-d12x = []
-d13x = []
-d21x = []
-g73x = []
-m6800 = []
+interrupts = ["artinchip-hal/interrupts"]
+async = [
+    "interrupts",
+    "dep:embassy-executor",
+    "dep:embassy-time",
+    "embassy-time/tick-hz-4_000_000",
+    "dep:embassy-time-driver",
+    "dep:embassy-time-queue-utils",
+]
+d12x = ["artinchip-hal/d12x"]
+d13x = ["artinchip-hal/d13x"]
+d21x = ["artinchip-hal/d21x"]
+g73x = ["artinchip-hal/g73x"]
+m6800 = ["artinchip-hal/m6800"]

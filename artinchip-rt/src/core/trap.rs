@@ -1,14 +1,16 @@
-//! ArtInChip RT Trap Handler.
+//! ArtInChip RT trap and vector-table startup hooks.
 
+#[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
 use core::arch::global_asm;
 use log::error;
+#[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
 use riscv::register::*;
 
-// The trampoline is used as an `mtvec` target.  CLIC-style chips (D13x and
-// siblings) run it in vectored mode, which requires 64-byte alignment.
-// D21x/C906 uses standard RISC-V direct mode instead, so 4-byte alignment is
-// enough there; a 64-byte demand would also fight the fixed D21x `.text` VMA.
-#[cfg(not(feature = "d21x"))]
+// CLIC SoCs require 64-byte alignment on `mtvec`; D21x/C906 uses 4-byte aligned direct mode.
+#[cfg(all(
+    any(target_arch = "riscv32", target_arch = "riscv64"),
+    not(feature = "d21x")
+))]
 global_asm!(
     "
     .align 6
@@ -18,7 +20,10 @@ global_asm!(
     "
 );
 
-#[cfg(feature = "d21x")]
+#[cfg(all(
+    any(target_arch = "riscv32", target_arch = "riscv64"),
+    feature = "d21x"
+))]
 global_asm!(
     "
     .balign 4
@@ -28,13 +33,11 @@ global_asm!(
     "
 );
 
-/// The default trap handler for Machine Mode (M-Mode).
+/// Default M-mode trap handler.
 ///
 /// # Safety
-///
-/// This function must only be invoked by the hardware trap mechanism.
-/// It relies on the `"riscv-interrupt-m"` ABI to automatically save and
-/// restore the context (registers) before and after execution.
+/// Must only be entered via the hardware `mtvec` trampoline.
+#[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
 #[unsafe(no_mangle)]
 pub unsafe extern "riscv-interrupt-m" fn DefaultTrapHandler() {
     let mcause = mcause::read();
@@ -48,7 +51,7 @@ pub unsafe extern "riscv-interrupt-m" fn DefaultTrapHandler() {
     unsafe {
         core::arch::asm!("csrr {}, 0x7C1", out(reg) mhcr);
         core::arch::asm!("csrr {}, 0x7C5", out(reg) mhint);
-    };
+    }
 
     let kind = if mcause.is_interrupt() {
         "Interrupt"
@@ -87,9 +90,28 @@ pub unsafe extern "riscv-interrupt-m" fn DefaultTrapHandler() {
     }
 }
 
-/// Placeholder vector table for non‑interrupt builds.
-/// Required by the linker script (`.clic.vector_table` with `KEEP`).
-/// Zero‑sized — merely marks the section so the linker doesn't error.
+#[cfg(not(any(target_arch = "riscv32", target_arch = "riscv64")))]
+#[doc(hidden)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn DefaultTrapHandler() {
+    error!("TRAP: DefaultTrapHandler invoked on host");
+    loop {
+        core::hint::spin_loop();
+    }
+}
+
+/// Initialize the active interrupt controller and trap/vector table during `_start`.
+///
+/// # Safety
+/// Must only be called once from `_start` before caches are enabled.
+#[cfg(feature = "interrupts")]
+#[doc(hidden)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn _init_vector_table() {
+    unsafe { artinchip_hal::interrupt::init_vector_table() };
+}
+
+/// Minimal trap setup for builds without the `interrupts` feature.
 #[cfg(not(feature = "interrupts"))]
 mod placeholder {
     #[repr(C, align(64))]
@@ -99,36 +121,30 @@ mod placeholder {
     #[unsafe(link_section = ".clic.vector_table")]
     static _PLACEHOLDER: ClicVectorTable = ClicVectorTable([0; 0]);
 
-    /// Empty implementation for when interrupts are not enabled.
+    /// Install `AlignedTrapHandler` into `mtvec` when full interrupt support is disabled.
     ///
     /// # Safety
-    ///
-    /// This function does nothing, only set the default trap.
+    /// Must only be called once from `_start`.
     #[unsafe(no_mangle)]
     pub unsafe extern "C" fn _init_vector_table() {
-        #[cfg(any(
-            feature = "d12x",
-            feature = "d13x",
-            feature = "g73x",
-            feature = "m6800"
+        #[cfg(all(
+            any(target_arch = "riscv32", target_arch = "riscv64"),
+            not(feature = "d21x")
         ))]
         unsafe {
-            // Set mtvec to AlignedTrapHandler in CLIC mode (MODE=3),
-            // matching the interrupts path.
             unsafe extern "C" {
                 fn AlignedTrapHandler();
             }
             let trap_addr = (AlignedTrapHandler as *const () as usize & !0x3) | 3;
             core::arch::asm!("csrw mtvec, {}", in(reg) trap_addr);
-
             riscv::interrupt::enable();
         }
 
-        #[cfg(feature = "d21x")]
+        #[cfg(all(
+            any(target_arch = "riscv32", target_arch = "riscv64"),
+            feature = "d21x"
+        ))]
         unsafe {
-            // C906 uses standard RISC-V mtvec direct mode here.  A PBP must
-            // not inherit the BROM trap vector: a synchronous fault would
-            // otherwise return control to ROM instead of stopping in PBP.
             unsafe extern "C" {
                 fn AlignedTrapHandler();
             }
