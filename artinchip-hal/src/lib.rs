@@ -38,6 +38,7 @@ pub mod rtc;
 pub mod sdmc;
 pub mod sid;
 pub mod spi_enc;
+pub mod spi_flash;
 pub mod sys_cfg;
 pub mod system;
 pub mod types;
@@ -62,6 +63,7 @@ pub mod traits {
     pub use crate::dram::DramExt as _;
     pub use crate::gtc::GtcExt as _;
     pub use crate::pwm::PwmExt as _;
+    pub use crate::qspi::QspiExt as _;
     pub use crate::rtc::RtcExt as _;
     pub use crate::uart::UartExt as _;
     pub use crate::wdog::WdogExt as _;
