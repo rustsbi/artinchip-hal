@@ -24,15 +24,23 @@ jobs:
     needs: fmt
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        FEATURES: [d12x, d13x, d21x, g73x, m6800]
+        FEATURES:
+          - d12x
+          - d13x
+          - d21x
+          - g73x
+          - m6800
+          - "d13x,interrupts,uart-logger"
+          - "d21x,interrupts,uart-logger"
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
       - name: Run cargo test
-        run: cargo test -p artinchip-hal --features ${{ matrix.FEATURES }}
+        run: cargo test -p artinchip-hal --no-default-features --features "${{ matrix.FEATURES }}"
 
   test-aicfwc:
     name: Test aicfwc
@@ -44,10 +52,12 @@ jobs:
         with:
           toolchain: stable
       - name: Run cargo test
-        run: cargo test -p aicfwc --all-features
+        run: |
+          cargo test -p aicfwc --no-default-features
+          cargo test -p aicfwc --all-features
 
-  test-hal-coverage:
-    name: Test artinchip-hal Coverage
+  coverage:
+    name: artinchip-hal Coverage
     needs: fmt
     runs-on: ubuntu-latest
     steps:
@@ -57,60 +67,71 @@ jobs:
           toolchain: stable
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin
-      - name: Generate code coverage
-        run: cargo tarpaulin --engine llvm -p artinchip-hal --features "d13x clic-interrupts" --out Html --output-dir ./coverage-report
-      - name: Upload coverage report
+      - name: Generate coverage
+        run: |
+          cargo tarpaulin --engine llvm \
+            -p artinchip-hal \
+            --no-default-features \
+            --features "d13x,interrupts,uart-logger" \
+            --out Html \
+            --output-dir ./coverage-report
+      - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report-html
           path: ./coverage-report/
 
-  clippy-hal-rt:
-    name: Clippy Check artinchip-hal and artinchip-rt
+  clippy:
+    name: Clippy ${{ matrix.package }} (${{ matrix.target }})
     needs: fmt
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # Bind each package to its specific interrupt feature
-        PACKAGE:
-          - name: artinchip-hal
-            int_feat: clic-interrupts
-          - name: artinchip-rt
-            int_feat: interrupts
-        CHIP_FEATURE: [d12x, d13x, d21x, g73x, m6800]
-        ENABLE_INT: [false, true]
-        # Exclude unsupported combinations (D21x has no CLIC)
-        exclude:
-          - CHIP_FEATURE: d21x
-            ENABLE_INT: true
+        include:
+          - package: artinchip-hal
+            target: riscv32imafc-unknown-none-elf
+            features: d12x
+          - package: artinchip-hal
+            target: riscv32imafc-unknown-none-elf
+            features: "d13x,interrupts,async-usb,uart-logger"
+          - package: artinchip-hal
+            target: riscv64gc-unknown-none-elf
+            features: "d21x,interrupts,async-usb,uart-logger"
+          - package: artinchip-hal
+            target: riscv32imafc-unknown-none-elf
+            features: "g73x,interrupts,async-usb,uart-logger"
+          - package: artinchip-hal
+            target: riscv32imafc-unknown-none-elf
+            features: "m6800,interrupts,async-usb,uart-logger"
+          - package: artinchip-rt
+            target: riscv32imafc-unknown-none-elf
+            features: "d13x,interrupts,async"
+          - package: artinchip-rt
+            target: riscv64gc-unknown-none-elf
+            features: "d21x,interrupts,async"
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: nightly
-          target: riscv32imafc-unknown-none-elf
+          target: ${{ matrix.target }}
           components: clippy
-      - name: Run cargo clippy
-        run: |
-          FEATURES="${{ matrix.CHIP_FEATURE }}"
-          if [ "${{ matrix.ENABLE_INT }}" = "true" ]; then
-            FEATURES="$FEATURES ${{ matrix.PACKAGE.int_feat }}"
-          fi
-          cargo clippy -p ${{ matrix.PACKAGE.name }} --target riscv32imafc-unknown-none-elf --features "$FEATURES" -- -D warnings
+      - name: Run clippy
+        run: cargo clippy -p ${{ matrix.package }} --target ${{ matrix.target }} --no-default-features --features "${{ matrix.features }}" -- -D warnings
 
   clippy-aicfwc:
-     name: Clippy Check aicfwc
-     needs: fmt
-     runs-on: ubuntu-latest
-     steps:
-       - uses: actions/checkout@v4
-       - uses: actions-rust-lang/setup-rust-toolchain@v1
-         with:
-           toolchain: stable
-           components: clippy
-       - name: Run cargo clippy for aicfwc
-         run: cargo clippy -p aicfwc --all-targets --all-features -- -D warnings
+    name: Clippy aicfwc
+    needs: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy
+      - name: Run clippy
+        run: cargo clippy -p aicfwc --all-targets --all-features -- -D warnings
 
   audit:
     name: Security Audit
@@ -127,57 +148,134 @@ jobs:
         run: cargo audit
 
   build-rv32-examples:
-    name: Build Examples for RV32
+    name: Build RV32 examples
     needs: fmt
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        FEATURES: [d13x]
-        EXAMPLES: [pbp-blinky, pbp-hello-world, pbp-i2c-master, pbp-boot-info, pbp-flash, pbp-dma, pbp-pwm, pbp-async-uart, pbp-psram, pbp-common]
+        EXAMPLES:
+          - pbp-blinky
+          - pbp-hello-world
+          - pbp-i2c-master
+          - pbp-boot-info
+          - pbp-dma
+          - pbp-pwm
+          - pbp-async-uart
+          - pbp-psram
+          - pbp-common
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: nightly
           target: riscv32imafc-unknown-none-elf
-      - name: Build examples
-        run: cargo build -p ${{ matrix.EXAMPLES }} --target riscv32imafc-unknown-none-elf --release --features ${{ matrix.FEATURES }}
+      - name: Build example
+        run: cargo build -p ${{ matrix.EXAMPLES }} --target riscv32imafc-unknown-none-elf --release --no-default-features --features d13x
 
-  build-rv32-apps:
-    name: Build Apps for RV32
+  media-decoupling:
+    name: Check media/chip decoupling
     needs: fmt
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: riscv32imafc-unknown-none-elf
+            features: "d13x,nand"
+          - target: riscv64gc-unknown-none-elf
+            features: "d21x,nor"
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: nightly
-          target: riscv32imafc-unknown-none-elf
-      # Built one package per invocation: `pbp-common` has a return-capable entry
-      # that conflicts with the app entry at link time.
-      - name: Build app packages
+          target: ${{ matrix.target }}
+      - name: Build app-bootloader
+        run: cargo check -p app-bootloader --target ${{ matrix.target }} --no-default-features --features "${{ matrix.features }}"
+
+  build-pbp-flash:
+    name: Build pbp-flash
+    needs: fmt
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: riscv32imafc-unknown-none-elf
+            features: "d13x,nor"
+          - target: riscv32imafc-unknown-none-elf
+            features: "d13x,nor,quad,dma"
+          - target: riscv64gc-unknown-none-elf
+            features: "d21x,nand"
+          - target: riscv64gc-unknown-none-elf
+            features: "d21x,nand,quad,dma"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          target: ${{ matrix.target }}
+      - name: Build pbp-flash
+        run: cargo build -p pbp-flash --target ${{ matrix.target }} --release --no-default-features --features "${{ matrix.features }}"
+
+  build-apps:
+    name: Build & package ${{ matrix.board }}
+    needs: fmt
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - board: d13x-nor
+            chip: d13x
+            features: "d13x,nor"
+            target: riscv32imafc-unknown-none-elf
+          - board: d13x-nor-quad-dma
+            chip: d13x
+            features: "d13x,nor,quad,dma"
+            target: riscv32imafc-unknown-none-elf
+          - board: d21x-nand
+            chip: d21x
+            features: "d21x,nand"
+            target: riscv64gc-unknown-none-elf
+          - board: d21x-nand-quad-dma
+            chip: d21x
+            features: "d21x,nand,quad,dma"
+            target: riscv64gc-unknown-none-elf
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          target: ${{ matrix.target }}
+      - name: Build apps
         run: |
-          cargo build -p app-bootloader --target riscv32imafc-unknown-none-elf --release --features d13x
-          cargo build -p app-blinky --target riscv32imafc-unknown-none-elf --release --features d13x
+          cargo build -p app-bootloader --target ${{ matrix.target }} --release --no-default-features --features ${{ matrix.features }}
+          cargo build -p app-blinky --target ${{ matrix.target }} --release --no-default-features --features ${{ matrix.chip }}
       - name: Package images
         run: |
-          cargo run -p aicfwc -- --build --toml examples/app/app-bootloader
-          cargo run -p aicfwc -- --build --toml examples/app/app-blinky
+          cargo run -p aicfwc -- --board ${{ matrix.board }} --bootloader --build
+          cargo run -p aicfwc -- --board ${{ matrix.board }} --app app-blinky --build
 
   build-rv64-examples:
-    name: Build Examples for RV64
+    name: Build RV64 examples
     needs: fmt
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        EXAMPLES: [pbp-blinky, pbp-hello-world]
+        EXAMPLES:
+          - pbp-blinky
+          - pbp-hello-world
+          - pbp-dram
+          - pbp-async-uart
+          - pbp-common
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: nightly
           target: riscv64gc-unknown-none-elf
-      - name: Build D21x examples
+      - name: Build example
         run: cargo build -p ${{ matrix.EXAMPLES }} --target riscv64gc-unknown-none-elf --release --no-default-features --features d21x
