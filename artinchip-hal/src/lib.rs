@@ -15,9 +15,13 @@
 ))]
 compile_error!("Enable only one SoC feature: d12x, d13x, or d21x.");
 
+#[cfg(all(feature = "d12x", feature = "async-usb"))]
+compile_error!("D12x does not support the `async-usb` feature.");
+
 // Ensure `riscv` (`critical-section-single-hart`) is linked for downstream crates.
 use riscv as _;
 
+pub mod aic_upg;
 pub mod axi_cfg;
 pub mod cache;
 pub mod ce;
@@ -66,6 +70,8 @@ pub mod traits {
     pub use crate::qspi::QspiExt as _;
     pub use crate::rtc::RtcExt as _;
     pub use crate::uart::UartExt as _;
+    #[cfg(not(feature = "d12x"))]
+    pub use crate::usbdrd::device::UsbDevExt as _;
     pub use crate::wdog::WdogExt as _;
     pub use crate::wri::WriExt as _;
     pub use crate::xspi::XspiExt as _;
@@ -94,9 +100,9 @@ pub mod instances {
     pub use crate::sys_cfg::{SocSysCfg, SysCfg, V1, V2};
     pub use crate::uart::Uart;
     #[cfg(not(feature = "d12x"))]
-    pub use crate::usbdrd::UsbDev;
+    pub use crate::usbdrd::device::UsbDev;
     #[cfg(not(feature = "d12x"))]
-    pub use crate::usbdrd::UsbHost;
+    pub use crate::usbdrd::host::UsbHost;
     pub use crate::wdog::Wdog;
     pub use crate::wri::Wri;
     pub use crate::xspi::{Xspi, XspiDriver};
