@@ -1,4 +1,4 @@
-//! PBP resource helpers shared by the CLI and the image manifest.
+//! PBP resource helpers shared by the CLI and the image packer.
 //!
 //! A PBP file is a `"PBP "` header (8 bytes: magic + 32-bit ones-complement word
 //! sum) followed by the executable. The word sum over the whole file must reach

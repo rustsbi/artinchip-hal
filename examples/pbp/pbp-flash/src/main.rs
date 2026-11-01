@@ -1,16 +1,28 @@
+//! Boot-flash configuration report and single/quad + FIFO/DMA verification example.
 #![no_std]
 #![no_main]
 
-use artinchip_hal::gtc::*;
+#[cfg(all(feature = "nor", feature = "nand"))]
+compile_error!("select at most one medium feature: `nor` or `nand`");
+#[cfg(not(any(feature = "nor", feature = "nand")))]
+compile_error!("select a medium feature: `nor` or `nand`");
+
+#[cfg(feature = "nand")]
+mod nand;
+#[cfg(feature = "nor")]
+mod nor;
+
+use artinchip_hal::gtc::CntFreq;
 use artinchip_hal::prelude::*;
-use artinchip_hal::qspi::*;
 use artinchip_hal::uart::*;
 use artinchip_rt::{Peripherals, default_clk_tree, pbp_entry, prelude::*};
-use embedded_io::Write;
-use log::{error, info};
+use log::info;
 use panic_halt as _;
 
-use w25qxxxjv::{Model, SpiSpeed, W25QXXXJV};
+/// 16-byte aligned buffer required by GPDMA transfers.
+#[cfg(any(feature = "quad", feature = "dma"))]
+#[repr(align(16))]
+pub(crate) struct DmaBuffer<const N: usize>(pub(crate) [u8; N]);
 
 #[pbp_entry]
 fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
@@ -19,123 +31,77 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
     let clocks = default_clk_tree();
     clocks.configure_plls(&mut p.cmu);
 
-    let tx = p.gpioa.pa0.into_uart0_tx();
-    let rx = p.gpioa.pa1.into_uart0_rx();
-    let mut uart0 =
-        uart_logger_init(p.uart0, tx, rx, UartConfig::default(), &clocks, &mut p.cmu).unwrap();
-
-    let mut led = p.gpioa.pa5.into_pull_up_output();
     let mut delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &mut p.cmu);
 
-    let sck = p.gpiob.pb4.into_qspi0_sck();
-    let miso = p.gpiob.pb1.into_qspi0_miso();
-    let mosi = p.gpiob.pb5.into_qspi0_mosi();
-
-    let cs = p.gpiob.pb2.into_pull_up_output();
-    let qspi0_pad = (
-        sck,
-        Some(mosi),
-        Some(miso),
-        None::<NoPad>,
-        None::<NoPad>,
-        None::<NoPad>,
-    );
-
+    let _console = {
+        let tx = p.gpioa.pa0.into_uart0_tx();
+        let rx = p.gpioa.pa1.into_uart0_rx();
+        uart_logger_init(p.uart0, tx, rx, UartConfig::default(), &clocks, &mut p.cmu).unwrap()
+    };
+    let mut led = p.gpioa.pa5.into_pull_up_output();
     info!("Welcome to pbp flash example by artinchip-hal🦀!");
 
-    let qspi0 = p
-        .qspi0
-        .new_blocking(qspi0_pad, QspiConfig::nor_flash(), &clocks, &mut p.cmu);
-
-    info!("QSPI initialized");
-
-    let mut flash = match W25QXXXJV::new(qspi0, cs, SpiSpeed::Single, Model::Q128) {
-        Ok(flash) => flash,
-        Err(e) => {
-            error!("Failed to initialize W25Q driver: {:?}", e);
-            loop {
-                led.toggle().ok();
-                delay.delay_ms(200);
-            }
-        }
+    let medium = if cfg!(feature = "nor") {
+        "NOR flash"
+    } else {
+        "NAND flash"
     };
+    let data = if cfg!(feature = "quad") {
+        "QUAD data"
+    } else {
+        "SINGLE data"
+    };
+    let transport = if cfg!(feature = "dma") {
+        "GPDMA mode"
+    } else {
+        "FIFO mode"
+    };
+    info!("Config: {medium}, {data}, {transport}");
 
-    info!("W25Q driver created");
-    delay.delay_ms(100);
+    #[cfg(feature = "nor")]
+    let ok = nor::run(
+        p.qspi0,
+        p.gpiob,
+        #[cfg(feature = "dma")]
+        p.dma,
+        delay,
+        &clocks,
+        &mut p.cmu,
+    );
 
-    match flash.manufacture_device_id() {
-        Ok(id) => {
-            info!("Manufacturer ID: 0x{:02X}", id[0]);
-            info!("Device ID:       0x{:02X}", id[1]);
-        }
-        Err(e) => {
-            error!("Failed to read ID: {:?}", e);
-        }
-    }
+    #[cfg(feature = "nand")]
+    let ok = nand::run(
+        p.qspi0,
+        p.gpiob,
+        #[cfg(feature = "dma")]
+        p.dma,
+        delay,
+        &clocks,
+        &mut p.cmu,
+    );
 
-    match flash.read_unique_id() {
-        Ok(uid) => {
-            info!("Unique ID: 0x{:016X}", uid);
-        }
-        Err(e) => {
-            error!("Failed to read Unique ID: {:?}", e);
-        }
-    }
+    blink(&mut led, &mut delay, ok);
+}
 
-    let mut read_buf = [0u8; 64];
+#[cfg(any(feature = "quad", feature = "dma"))]
+pub(crate) fn outcome(condition: bool) -> &'static str {
+    if condition { "OK" } else { "FAIL" }
+}
 
-    // Read first 64 bytes from flash
-    match flash.read_data(0x0000, &mut read_buf) {
-        Ok(_) => {
-            info!("First 64 bytes from flash:");
+pub(crate) fn ascii(buffer: &[u8; 4]) -> &str {
+    core::str::from_utf8(buffer).unwrap_or("????")
+}
 
-            // Print 64 bytes, 16 bytes per line
-            for i in 0..4 {
-                write!(uart0, "{:04X}: ", i * 16).ok();
-                for j in 0..16 {
-                    write!(uart0, "{:02X} ", read_buf[i * 16 + j]).ok();
-                }
-                writeln!(uart0).ok();
-            }
-
-            // Check magic number
-            let mut magic_num = [0u8; 4];
-            match flash.read_data(0x0, &mut magic_num) {
-                Ok(_) => {
-                    info!("Magic number1(expected: \"AIC \"):");
-                    write!(uart0, "\"").ok();
-                    for byte in magic_num {
-                        write!(uart0, "{}", byte as char).ok();
-                    }
-                    writeln!(uart0, "\"").ok();
-                }
-                Err(e) => {
-                    error!("Failed to read magic number1: {:?}", e);
-                }
-            }
-            match flash.read_data(0x100, &mut magic_num) {
-                Ok(_) => {
-                    info!("Magic number2(expected: \"PBP \"):");
-                    write!(uart0, "\"").ok();
-                    for byte in magic_num {
-                        write!(uart0, "{}", byte as char).ok();
-                    }
-                    writeln!(uart0, "\"").ok();
-                }
-                Err(e) => {
-                    error!("Failed to read magic number2: {:?}", e);
-                }
-            }
-        }
-        Err(e) => {
-            error!("Failed to read flash: {:?}", e);
-        }
-    }
-
-    info!("Tests complete");
-
+fn blink<L, D>(led: &mut L, delay: &mut D, ok: bool) -> !
+where
+    L: embedded_hal::digital::OutputPin,
+    D: embedded_hal::delay::DelayNs,
+{
+    let period = if ok { 500u32 } else { 200u32 };
     loop {
-        led.toggle().ok();
-        delay.delay_ms(500);
+        led.set_high().ok();
+        delay.delay_ms(period);
+        led.set_low().ok();
+        delay.delay_ms(period);
     }
 }

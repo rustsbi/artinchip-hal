@@ -1,0 +1,93 @@
+# Board preset: ArtInChip D21x (RV64 C906) with a SPI-NAND W25N01GV on QSPI0.
+#
+# This file is the single source of truth for the board: the flash layout, the
+# boot chain and the applications' link addresses. `aicfwc` packs images from it
+# and the `build.rs` scripts link against it, so nothing about this board is
+# repeated per application.
+#
+# Package it with (from the workspace root):
+#
+#   cargo run -p aicfwc -- --board d21x-nand --bootloader --build
+#   cargo run -p aicfwc -- --board d21x-nand --app app-blinky --build
+#
+# The preset schema is documented in `aicfwc/src/preset.rs`.
+
+[board]
+name = "d21x-nand"
+chip = "d21x"
+target = "riscv64gc-unknown-none-elf"
+
+[image]
+platform = "d21x"
+product = "general-board"
+version = "0.1.0"
+media = "spi-nand"
+media_dev_id = 0
+# 2 KiB pages in 128 KiB blocks, 1024 blocks (128 MiB); the same string the
+# vendor's `partition.json` carries for this part.
+media_id = "P=2K,B=128K"
+# Empty boots the first partition after `bootloader` holding a valid AIC image.
+app = ""
+
+# Our own on-flash layout (the vendor's NAND sizes: `bootloader` 1 MiB, then the
+# application). `bootloader` must stay at 0x0: the BootROM reads the first-stage
+# image there (through an `AICP` page table, which `aicfwc` adds for the flash
+# copy of the slot-0 image).
+[[partition]]
+name = "bootloader"
+offset = 0x000000
+size = 0x100000   # 1 MiB
+
+[[partition]]
+name = "app"
+offset = 0x100000
+size = 0x400000   # 4 MiB
+
+# Boot-chain components: `image.updater.*` (downloaded to `ram` and `EXEC`ed by
+# the host tool) and `image.target.*` (burned to a partition). An entry with both
+# `updater = true` and a `partition` expands to one of each. Every PBP slot carries
+# our own `pbp-common`; the `d21x` feature selects its chip half.
+
+# DDR bring-up helper: the BootROM runs it as `image.updater.ddr` while DRAM is
+# still off; it brings the controller up and returns to the BootROM.
+[[component]]
+kind = "pbp"
+name = "ddr"
+updater = true
+ram = 0x00103000
+attr = "required;run"
+package = "pbp-common"
+features = ["d21x"]
+filename = "usbupg-ddr-init.aic"
+
+# The first-stage bootloader, once for both roles: the RAM copy is the
+# updater the host `EXEC`s with DRAM live, the flash copy is the installed
+# bootloader. `ext_reserve` keeps the nested loader clear of the PBP's stack,
+# which lives in the same RAM slot (`artinchip-rt/src/pbp.rs`).
+[[component]]
+kind = "app"
+name = "bootloader"
+updater = true
+ram = 0x40800000
+attr = "required;run"
+partition = "bootloader"
+package = "app-bootloader"
+features = ["d21x", "nand"]
+pbp_features = ["d21x"]
+filename = "bootloader.aic"
+target_filename = "app-bootloader.aic"
+load_address = 0x41000000
+entry_offset = 0x100
+pbp_package = "pbp-common"
+ext_reserve = 0x2000
+
+# Applications. The table key is the cargo package; `load_address` is the link
+# base (`APP_BASE`) the package's `build.rs` links it at, and `aicfwc` validates
+# the built ELF against it. D21x applications are linked into DRAM.
+[apps.app-blinky]
+name = "blinky"
+partition = "app"
+filename = "app-blinky.aic"
+attr = "mtd;optional"
+load_address = 0x42000000
+features = ["d21x"]

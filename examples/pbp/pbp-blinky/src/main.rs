@@ -17,23 +17,12 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
 
     let mut delay = p.gtc.new_timer_delay(CntFreq::Freq4M, &mut p.cmu);
 
-    #[cfg(not(feature = "d21x"))]
-    let (mut led, _uart) = {
+    let _uart = {
         let tx = p.gpioa.pa0.into_uart0_tx();
         let rx = p.gpioa.pa1.into_uart0_rx();
-        let uart =
-            uart_logger_init(p.uart0, tx, rx, UartConfig::default(), &clocks, &mut p.cmu).unwrap();
-        (p.gpioa.pa5.into_pull_up_output(), uart)
+        uart_logger_init(p.uart0, tx, rx, UartConfig::default(), &clocks, &mut p.cmu).unwrap()
     };
-
-    #[cfg(feature = "d21x")]
-    let (mut led, _uart) = {
-        let tx = p.gpiod.pd6.into_uart1_tx();
-        let rx = p.gpiod.pd7.into_uart1_rx();
-        let uart =
-            uart_logger_init(p.uart1, tx, rx, UartConfig::default(), &clocks, &mut p.cmu).unwrap();
-        (p.gpioe.pe15.into_pull_up_output(), uart)
-    };
+    let mut led = p.gpioa.pa5.into_pull_up_output();
 
     info!("Welcome to pbp blinky example by artinchip-hal🦀!");
 

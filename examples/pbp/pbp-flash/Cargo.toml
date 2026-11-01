@@ -5,16 +5,18 @@ edition = "2024"
 
 [dependencies]
 panic-halt = "1.0.0"
-embedded-io = "0.7.1"
-embedded-time = "0.12.1"
 embedded-hal = "1.0.0"
+embedded-storage = "0.3.1"
 artinchip-hal = { version = "0.0.0", path = "../../../artinchip-hal" }
-artinchip-rt = { version = "0.0.0", path = "../../../artinchip-rt" }
-w25qxxxjv = { git = "https://github.com/CosmoBunny/w25qxxxjv.git", branch = "main" }
+artinchip-rt = { version = "0.0.0", path = "../../../artinchip-rt", default-features = false }
 log = { version = "0.4", default-features = false }
 
 [features]
-default = ["d13x", "logger"]
+default = ["d13x", "nor"]
 logger = ["artinchip-hal/uart-logger"]
-d13x = ["artinchip-rt/d13x", "artinchip-hal/d13x"]
-# TODO other features for all the chips.
+nor = []
+nand = []
+quad = []
+dma = []
+d13x = ["artinchip-rt/d13x", "logger"]
+d21x = ["artinchip-rt/d21x", "logger"]

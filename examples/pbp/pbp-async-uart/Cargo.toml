@@ -8,16 +8,13 @@ panic-halt = "1.0.0"
 embedded-io = "0.7.1"
 embedded-io-async = "0.7.0"
 embassy-futures = "0.1.2"
-critical-section = "1.2.0"
-riscv = { version = "0.16.1", features = ["critical-section-single-hart"] }
 heapless = "0.9.3"
-paste = "1.0"
 artinchip-hal = { version = "0.0.0", path = "../../../artinchip-hal" }
-artinchip-rt = { version = "0.0.0", path = "../../../artinchip-rt" }
+artinchip-rt = { version = "0.0.0", path = "../../../artinchip-rt", default-features = false, features = ["interrupts"] }
 log = { version = "0.4", default-features = false }
 
 [features]
-default = ["d13x", "logger", "artinchip-rt/interrupts", "artinchip-hal/clic-interrupts"]
+default = ["d13x"]
 logger = ["artinchip-hal/uart-logger"]
-d13x = ["artinchip-rt/d13x", "artinchip-hal/d13x"]
-# TODO other features for all the chips.
+d13x = ["artinchip-rt/d13x", "logger"]
+d21x = ["artinchip-rt/d21x", "logger"]

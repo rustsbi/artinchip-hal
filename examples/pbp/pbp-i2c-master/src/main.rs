@@ -4,6 +4,7 @@
 use artinchip_hal::gtc::CntFreq;
 use artinchip_hal::i2c::*;
 use artinchip_hal::prelude::*;
+use artinchip_hal::system;
 use artinchip_hal::uart::*;
 use artinchip_rt::{Peripherals, default_clk_tree, pbp_entry, prelude::*};
 use log::{error, info};
@@ -35,12 +36,12 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
 
     info!("Welcome to pbp i2c master example by artinchip-hal🦀!");
 
-    // Ensure rst and int pins are low
+    // Ensure rst and int pins are low.
     touch_rst.set_low().ok();
     touch_int.set_low().ok();
     delay.delay_ms(10);
 
-    // Initialize GT911 address
+    // Initialize GT911 address.
     info!("Initializing GT911 address... ");
     touch_int.set_high().ok();
     delay.delay_us(110);
@@ -71,5 +72,5 @@ fn pbp_main(boot_param: BootParam, _private_data: &[u8]) {
         }
     }
 
-    loop {}
+    system::halt();
 }
