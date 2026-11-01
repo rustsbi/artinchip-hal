@@ -1,162 +1,91 @@
-//! Application image runtime.
+//! Application image runtime (`#[app_entry]`).
 //!
-//! This is the loader-style counterpart of [`crate::pbp`]: the image is a normal
-//! AIC `loader` resource (256-byte AIC header + payload at `load_address + 0x100`)
-//! that the boot chain copies and jumps to. The user entry point is provided by
-//! [`artinchip_rt_macros::app_entry`] and exported as `app_main`.
+//! Supports both:
+//! - asynchronous applications (`#[app_entry] async fn app_main()`), driven by
+//!   the built-in Embassy executor with `CPU_TIMER` bound automatically, and
+//! - synchronous loader/boot images (`#[app_entry] fn app_main(boot_param, private_data)`).
 
-use core::arch::naked_asm;
+#[cfg(all(feature = "async", any(feature = "d13x", feature = "d21x")))]
+use core::mem::MaybeUninit;
+#[cfg(all(feature = "async", any(feature = "d13x", feature = "d21x")))]
+use core::sync::atomic::{AtomicBool, Ordering};
+#[cfg(all(feature = "async", any(feature = "d13x", feature = "d21x")))]
+use embassy_executor::{SpawnToken, Spawner, raw};
 
-/// Application stack size.
-///
-/// This has to be far larger than what a PBP needs: application code keeps
-/// large objects *by value* on the stack, e.g. the upgrade protocol engine in
-/// `examples/app/app-bootloader`, whose inline request/response buffers alone are
-/// about 13 KiB. With a 2 KiB stack that overflows the moment the engine is
-/// constructed — silently, since there is no stack guard.
-///
-/// The stack lives in `.bss.uninit`, which is not part of the loaded image, so
-/// this only costs RAM.
-const STACK_SIZE: usize = 64 * 1024; // 64 KiB
+#[cfg(all(feature = "async", any(feature = "d13x", feature = "d21x")))]
+use crate::sync::SingleCore;
 
-/// Stack backing storage. Only the buffer's address is consumed by the assembly
-/// entry points through the `sym STACK` operand, so the wrapped field is never
-/// read from Rust code and is flagged as dead code.
-#[repr(align(16))]
-#[allow(dead_code)]
-struct Stack([u8; STACK_SIZE]);
+pub use crate::entry::app::{AppStack, STACK_SIZE};
 
-#[unsafe(link_section = ".bss.uninit")]
-static mut STACK: Stack = Stack([0u8; STACK_SIZE]);
+#[cfg(all(feature = "async", any(feature = "d13x", feature = "d21x")))]
+static RUNNING: AtomicBool = AtomicBool::new(false);
 
-const MXSTATUS: u16 = 0x7c0;
+#[cfg(all(feature = "async", any(feature = "d13x", feature = "d21x")))]
+static EXECUTOR: SingleCore<MaybeUninit<raw::Executor>> = SingleCore::new(MaybeUninit::uninit());
 
-/// D21x (C906) application entry point.
-#[cfg(feature = "d21x")]
-#[unsafe(naked)]
-#[unsafe(no_mangle)]
-#[unsafe(link_section = ".text.entry")]
-pub extern "C" fn _start() {
-    naked_asm!(
-        // 1. Disable interrupts and park the BootROM arguments. This entry has no
-        // vector table of its own, so no interrupt state is inherited.
-        "   csrw    mie, zero
-            csrw    mip, zero
-            csrci   mstatus, 0x8
-            mv      s0, a0
-            mv      s1, a1",
+#[cfg(all(feature = "async", any(feature = "d13x", feature = "d21x")))]
+static PENDER: AtomicBool = AtomicBool::new(false);
 
-        // 2. Hart specific initialization: enable T-Head instruction sets
-        // (THEADISAEE) and misaligned access (MM) in `mxstatus`.
-        "   li      t0, 0x408000
-            csrs    {mxstatus}, t0",
+#[cfg(all(feature = "async", any(feature = "d13x", feature = "d21x")))]
+static SPAWNER: SingleCore<Option<Spawner>> = SingleCore::new(None);
 
-        // 3. Initialize the floating point unit (mstatus.FS = initial, fcsr = 0).
-        "   li      t0, 0x4000
-            li      t1, 0x2000
-            csrc    mstatus, t0
-            csrs    mstatus, t1
-            csrw    fcsr, zero",
+/// Start the built-in Embassy executor, bind `CPU_TIMER`, and poll `token` forever.
+#[cfg(all(feature = "async", any(feature = "d13x", feature = "d21x")))]
+pub fn run_task<S>(token: SpawnToken<S>) -> ! {
+    assert!(
+        !RUNNING.swap(true, Ordering::AcqRel),
+        "artinchip-rt executor is already running"
+    );
 
-        // 4. Clear `.bss`; `.bss.uninit` holds the stack and is excluded.
-        "   la      t0, sbss
-            la      t1, ebss
-        1:  bgeu    t0, t1, 2f
-            sw      zero, 0(t0)
-            addi    t0, t0, 4
-            j       1b",
+    crate::time::init();
 
-        // 5. Prepare the programming language stack.
-        "2: la      sp, {stack} + {stack_size}",
+    let executor: &'static raw::Executor = unsafe {
+        let slot = &mut *EXECUTOR.as_ptr();
+        slot.write(raw::Executor::new(core::ptr::null_mut()))
+    };
 
-        // 6. Install the local vector table and enable caches before Rust.
-        "   call    {init_vector_table}
-            call    {enable_cache}
-            fence.i",
+    publish(executor.spawner());
+    executor.spawner().spawn(token);
 
-        // 7. Restore the BootROM arguments and enter Rust. The third argument is
-        // not part of the app ABI, so `private_data` stays empty.
-        "   mv      a0, s0
-            mv      a1, s1
-            mv      a2, zero
-            j       {main}",
+    loop {
+        crate::time::service();
 
-        // 8. Platform halt if the app returns.
-        "   csrci   mstatus, 0x8
-        3:  wfi
-            j       3b",
+        PENDER.store(false, Ordering::Relaxed);
+        unsafe { executor.poll() };
 
-        stack_size = const STACK_SIZE,
-        stack = sym STACK,
-        main = sym app_main,
-        init_vector_table = sym _init_vector_table,
-        enable_cache = sym _enable_cache,
-        mxstatus = const MXSTATUS,
-    )
+        crate::time::report();
+
+        let next = crate::time::service();
+        loop {
+            if PENDER.load(Ordering::Relaxed) || next == u64::MAX || crate::time::now() >= next {
+                break;
+            }
+            core::hint::spin_loop();
+        }
+    }
 }
 
-/// D13x (E907) application entry point.
-#[cfg(not(feature = "d21x"))]
-#[unsafe(naked)]
-#[unsafe(no_mangle)]
-#[unsafe(link_section = ".text.entry")]
-pub extern "C" fn _start() {
-    const MEXSTATUS: u16 = 0x7e1;
-
-    naked_asm!(
-        // 1. Disable interrupts.
-        "   csrw    mie, zero",
-
-        // 2. Hart specific initialization: enable T-Head instruction sets
-        // (THEADISAEE) and misaligned access (MM) in `mxstatus`.
-        "   li      t2, 0x408000
-            csrs    {mxstatus}, t2",
-
-        // 3. Initialize the floating point unit (mstatus.FS = initial, fcsr = 0).
-        "   li      t0, 0x4000
-            li      t1, 0x2000
-            csrc    mstatus, t0
-            csrs    mstatus, t1
-            csrw    fcsr, zero",
-
-        // 4. Clear `.bss`; `.bss.uninit` holds the stack and is excluded.
-        "   la      t0, sbss
-            la      t1, ebss
-        1:  bgeu    t0, t1, 2f
-            sw      zero, 0(t0)
-            addi    t0, t0, 4
-            j       1b",
-
-        // 5. Prepare the programming language stack.
-        "2: la      sp, {stack} + {stack_size}",
-
-        // 6. Install the local vector table and enable caches before Rust.
-        "   call    {init_vector_table}
-            call    {enable_cache}
-            fence.i",
-
-        // 7. Enter Rust with the BootROM app arguments still in `a0`/`a1`.
-        "   j       {main}",
-
-        // 8. Platform halt if the app returns, clearing MEXSTATUS first.
-        "   li      t0, 0x1c
-            csrc    {mexstatus}, t0
-            csrci   mstatus, 0x8
-        3:  wfi
-            j       3b",
-
-        stack_size = const STACK_SIZE,
-        stack = sym STACK,
-        main = sym app_main,
-        init_vector_table = sym _init_vector_table,
-        enable_cache = sym _enable_cache,
-        mxstatus = const MXSTATUS,
-        mexstatus = const MEXSTATUS,
-    )
+/// Spawn a task on the application's built-in Embassy executor.
+///
+/// # Panics
+/// Panics if called before [`run_task`] has started the executor.
+#[cfg(all(feature = "async", any(feature = "d13x", feature = "d21x")))]
+pub fn spawn<S>(token: SpawnToken<S>) {
+    critical_section::with(|_| {
+        let spawner = unsafe { *SPAWNER.as_ptr() }.expect("the async runtime is not running");
+        spawner.spawn(token);
+    });
 }
 
-unsafe extern "C" {
-    unsafe fn app_main(boot_param: u32, priv_addr: *const u8, priv_len: u32);
-    unsafe fn _init_vector_table();
-    unsafe fn _enable_cache();
+#[cfg(all(feature = "async", any(feature = "d13x", feature = "d21x")))]
+fn publish(spawner: Spawner) {
+    critical_section::with(|_| {
+        unsafe { *SPAWNER.as_ptr() = Some(spawner) };
+    });
+}
+
+#[cfg(all(feature = "async", any(feature = "d13x", feature = "d21x")))]
+#[unsafe(export_name = "__pender")]
+fn pender(_context: *mut ()) {
+    PENDER.store(true, Ordering::Relaxed);
 }

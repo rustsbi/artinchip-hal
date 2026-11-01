@@ -27,6 +27,22 @@ pub enum BootDevice {
     Udisk,
 }
 
+impl core::fmt::Display for BootDevice {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Self::None => "unknown",
+            Self::Sdmc0 => "SD/MMC0",
+            Self::Sdmc1 => "SD/MMC1",
+            Self::Sdmc2 => "SD/MMC2",
+            Self::Spinor => "SPI-NOR",
+            Self::Spinand => "SPI-NAND",
+            Self::Sdfat32 => "SD FAT32",
+            Self::Usb => "USB",
+            Self::Udisk => "U-Disk",
+        })
+    }
+}
+
 /// Boot controller (bits [7:4] of boot_param).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -163,10 +179,8 @@ pub fn upg_requested(boot_param: &BootParam) -> bool {
     }
 
     // Active-low: held is bit 0 clear.
-    let held = (0..UPG_KEY_SAMPLES).all(|_| unsafe {
-        // Safety: see the read above.
-        core::ptr::read_volatile(PA_INPUT_STATE as *const u32) & 1 == 0
-    });
+    let held = (0..UPG_KEY_SAMPLES)
+        .all(|_| unsafe { core::ptr::read_volatile(PA_INPUT_STATE as *const u32) & 1 == 0 });
 
     // Safety: always restore, so a negative probe leaves PA0 as its owner set it.
     unsafe { core::ptr::write_volatile(PA0_PIN_CONFIG as *mut u32, old) };
@@ -182,8 +196,6 @@ pub fn upg_requested(boot_param: &BootParam) -> bool {
 /// BootROM is willing to use.
 unsafe fn jump_to_brom(entry: u32, stack: u32) -> ! {
     unsafe {
-        // Clean + invalidate all, then disable both: the ROM does not know about
-        // the dirty lines this image left behind.
         dcache_ciall();
         _disable_cache();
     }
@@ -289,7 +301,6 @@ pub unsafe fn jump_to_c906_upg_entry() {
 /// is held by definition - hand the machine to the BROM and never return.
 pub fn check_upg_req(boot_param: &BootParam) {
     if upg_requested(boot_param) {
-        // Safety: a held key was just reported, and the BootROM owns the chip now.
         unsafe { enter_upg_mode() };
     }
 }

@@ -2,18 +2,18 @@
 
 use core::sync::atomic::{Ordering, fence};
 use log::error;
+#[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
 use xuantie_riscv::asm::{dcache_ciall, dcache_cipa, dcache_ipa, icache_iall};
+#[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
 use xuantie_riscv::register::mhcr;
 
 /// Enable I-Cache and D-Cache.
 ///
-/// Must be called after vector table initialization and before main.
-///
-/// # Safety
-/// Caller must ensure vector table is already written to memory
-/// and I-cache will be coherent after the subsequent `fence.i`.
+/// Must be called after vector table initialization and before `main`.
+#[doc(hidden)]
 #[unsafe(no_mangle)]
-pub(crate) extern "C" fn _enable_cache() {
+pub extern "C" fn _enable_cache() {
+    #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
     unsafe {
         dcache_ciall();
         icache_iall();
@@ -23,37 +23,28 @@ pub(crate) extern "C" fn _enable_cache() {
 }
 
 /// Disable I-Cache and D-Cache.
-///
-/// # Safety
-/// Caller must ensure that no code will be executed from I-cache after this call.
+#[doc(hidden)]
 #[unsafe(no_mangle)]
-pub(crate) extern "C" fn _disable_cache() {
+pub extern "C" fn _disable_cache() {
+    #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
     unsafe {
         mhcr::clear_ie();
         mhcr::clear_de();
     }
 }
 
-/// Clean + invalidate both caches.
-///
-/// Used by the D13x PBP entry between `pbp_main` and restoring the caller's
-/// `mhcr`: the run may have left dirty lines behind, and the caller resumes with
-/// its own cache configuration.
-#[cfg(not(feature = "d21x"))]
+/// Clean + invalidate both caches before PBP service-call return.
+#[doc(hidden)]
 #[unsafe(no_mangle)]
-pub(crate) extern "C" fn _flush_cache() {
+pub extern "C" fn _flush_cache() {
+    #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
     unsafe {
         dcache_ciall();
         icache_iall();
     }
 }
 
-#[cfg(any(
-    feature = "d12x",
-    feature = "d13x",
-    feature = "g73x",
-    feature = "m6800"
-))]
+#[cfg(not(feature = "d21x"))]
 pub const CACHE_LINE: usize = 32;
 #[cfg(feature = "d21x")]
 pub const CACHE_LINE: usize = 64;
@@ -75,9 +66,12 @@ pub unsafe fn dcache_clean_invalidate_range(addr: usize, len: usize) {
     let end = (addr + len + CACHE_LINE - 1) & !(CACHE_LINE - 1);
     let mut p = start;
     while p < end {
+        #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
         unsafe {
             dcache_cipa(p);
         }
+        #[cfg(not(any(target_arch = "riscv32", target_arch = "riscv64")))]
+        let _ = p;
         p += CACHE_LINE;
     }
     fence(Ordering::SeqCst);
@@ -100,9 +94,12 @@ pub unsafe fn dcache_invalidate_range(addr: usize, len: usize) {
     let end = (addr + len + CACHE_LINE - 1) & !(CACHE_LINE - 1);
     let mut p = start;
     while p < end {
+        #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
         unsafe {
             dcache_ipa(p);
         }
+        #[cfg(not(any(target_arch = "riscv32", target_arch = "riscv64")))]
+        let _ = p;
         p += CACHE_LINE;
     }
     fence(Ordering::SeqCst);

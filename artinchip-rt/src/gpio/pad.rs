@@ -23,7 +23,7 @@ impl<const G: char, const N: u8> GpioPad<G, N> {
     }
 
     /// Get a reference to the register block.
-    pub const fn register_block(&self) -> &RegisterBlock {
+    pub const fn register_block(&self) -> &'static RegisterBlock {
         unsafe { &*self.reg }
     }
 }
@@ -31,61 +31,61 @@ impl<const G: char, const N: u8> GpioPad<G, N> {
 impl<const G: char, const N: u8> PadExt<'static, G, N> for GpioPad<G, N> {
     #[inline]
     fn into_pull_up_output(self) -> Output<'static, G, N> {
-        unsafe { Output::new_pull_up(&*self.reg) }
+        Output::new_pull_up(self.register_block())
     }
     #[inline]
     fn into_pull_down_output(self) -> Output<'static, G, N> {
-        unsafe { Output::new_pull_down(&*self.reg) }
+        Output::new_pull_down(self.register_block())
     }
     #[inline]
     fn into_floating_output(self) -> Output<'static, G, N> {
-        unsafe { Output::new_floating(&*self.reg) }
+        Output::new_floating(self.register_block())
     }
     #[inline]
     fn into_pull_up_input(self) -> Input<'static, G, N> {
-        unsafe { Input::new_pull_up(&*self.reg) }
+        Input::new_pull_up(self.register_block())
     }
     #[inline]
     fn into_pull_down_input(self) -> Input<'static, G, N> {
-        unsafe { Input::new_pull_down(&*self.reg) }
+        Input::new_pull_down(self.register_block())
     }
     #[inline]
     fn into_floating_input(self) -> Input<'static, G, N> {
-        unsafe { Input::new_floating(&*self.reg) }
+        Input::new_floating(self.register_block())
     }
     #[inline]
     fn into_function<const F: u8>(self) -> Function<'static, G, N, F> {
-        unsafe { Function::new_with_func(&*self.reg) }
+        Function::new_with_func(self.register_block())
     }
 }
 
 impl<'a, const G: char, const N: u8> PadExt<'a, G, N> for &'a mut GpioPad<G, N> {
     #[inline]
     fn into_pull_up_output(self) -> Output<'a, G, N> {
-        unsafe { Output::new_pull_up(&*self.reg) }
+        Output::new_pull_up(self.register_block())
     }
     #[inline]
     fn into_pull_down_output(self) -> Output<'a, G, N> {
-        unsafe { Output::new_pull_down(&*self.reg) }
+        Output::new_pull_down(self.register_block())
     }
     #[inline]
     fn into_floating_output(self) -> Output<'a, G, N> {
-        unsafe { Output::new_floating(&*self.reg) }
+        Output::new_floating(self.register_block())
     }
     #[inline]
     fn into_pull_up_input(self) -> Input<'a, G, N> {
-        unsafe { Input::new_pull_up(&*self.reg) }
+        Input::new_pull_up(self.register_block())
     }
     #[inline]
     fn into_pull_down_input(self) -> Input<'a, G, N> {
-        unsafe { Input::new_pull_down(&*self.reg) }
+        Input::new_pull_down(self.register_block())
     }
     #[inline]
     fn into_floating_input(self) -> Input<'a, G, N> {
-        unsafe { Input::new_floating(&*self.reg) }
+        Input::new_floating(self.register_block())
     }
     #[inline]
     fn into_function<const F: u8>(self) -> Function<'a, G, N, F> {
-        unsafe { Function::new_with_func(&*self.reg) }
+        Function::new_with_func(self.register_block())
     }
 }

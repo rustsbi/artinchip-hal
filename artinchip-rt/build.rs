@@ -14,38 +14,38 @@ fn parse_addr(value: &str) -> Option<u32> {
 
 fn main() {
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
-    let ld = &out.join("artinchip-rt.ld");
-
-    // Cargo automatically sets CARGO_FEATURE_<name>=1 for each enabled feature
-    // of this crate. When pbp-hello-world enables d21x feature (which propagates
-    // via artinchip-rt/d21x), CARGO_FEATURE_D21X is set here. d21x takes priority
-    // over d13x when both are enabled (e.g. default + --features d21x).
     let is_d21x = env::var("CARGO_FEATURE_D21X").is_ok();
 
-    // With the `app` feature the crate is linked as an application image loaded
-    // by the boot chain instead of a PBP: the 256-byte AIC header sits at the
-    // load address, so the code is linked at `base + 0x100`. The base can be
-    // overridden with `ARTINCHIP_APP_BASE` (hex or decimal).
-    let script: String = if env::var("CARGO_FEATURE_APP").is_ok() {
-        let default_base = if is_d21x { 0x0010_3100 } else { 0x406c_0000 };
-        let base = env::var("ARTINCHIP_APP_BASE")
-            .ok()
-            .and_then(|value| parse_addr(&value))
-            .unwrap_or(default_base);
-        APP_SCRIPT_TEMPLATE.replace("{base}", &format!("{base:#x}"))
-    } else if is_d21x {
+    let pbp_script = if is_d21x {
         String::from_utf8(LINKER_SCRIPT_D21X.to_vec()).unwrap()
     } else {
         String::from_utf8(LINKER_SCRIPT_D13X.to_vec()).unwrap()
     };
 
-    std::fs::write(ld, script).unwrap();
+    let default_base = if is_d21x { 0x0010_3100 } else { 0x406c_0000 };
+    let base = env::var("ARTINCHIP_APP_BASE")
+        .ok()
+        .and_then(|value| parse_addr(&value))
+        .unwrap_or(default_base);
+    let app_script = APP_SCRIPT_TEMPLATE.replace("{base}", &format!("{base:#x}"));
+
+    std::fs::write(out.join("artinchip-pbp.ld"), &pbp_script).unwrap();
+    std::fs::write(out.join("artinchip-app.ld"), &app_script).unwrap();
+
+    // Compatibility alias for existing crates passing `-Tartinchip-rt.ld`.
+    let compat_script = if env::var("CARGO_FEATURE_APP").is_ok() {
+        &app_script
+    } else {
+        &pbp_script
+    };
+    let ld = out.join("artinchip-rt.ld");
+    std::fs::write(&ld, compat_script).unwrap();
 
     println!("cargo:rustc-link-arg=-T{}", ld.display());
     println!("cargo:rustc-link-search={}", out.display());
 }
 
-/// Linker script for D13x / E907 (32-bit), (Compatible with D12x, G73x while not verified yet): PBP loaded at 0x3004_4000.
+/// Linker script for D13x / E907 (32-bit): PBP loaded at 0x3004_4000.
 const LINKER_SCRIPT_D13X: &[u8] = b"OUTPUT_ARCH(riscv)
 ENTRY(_start)
 SECTIONS {
@@ -131,11 +131,8 @@ SECTIONS {
     }
 }";
 
-/// Application image linker script template. `{base}` is the fallback load
-/// address; a `APP_BASE` symbol (from `--defsym=APP_BASE=...`, emitted by the
-/// app crate's build script from its TOML manifest) overrides it. The 256-byte
-/// AIC header lives at `base`, code starts at `base+0x100` and the loader entry
-/// point is therefore `base + 0x100`.
+/// Application image linker script template (`APP_BASE` from `--defsym=APP_BASE=...`
+/// overrides `{base}`; the 256-byte AIC header precedes code at `base + 0x100`).
 const APP_SCRIPT_TEMPLATE: &str = r#"OUTPUT_ARCH(riscv)
 ENTRY(_start)
 SECTIONS {

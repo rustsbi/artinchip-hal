@@ -1,89 +1,36 @@
-//! ArtInChip ROM runtime procedural macros.
+//! ArtInChip ROM and application runtime procedural macros.
 
+use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
 use syn::{
     FnArg, ItemFn, LitStr, ReturnType, Type, Visibility, parse, parse_macro_input, spanned::Spanned,
 };
 
-use proc_macro::TokenStream;
-
-/// Pre-Boot Program (PBP) entry.
+/// Pre-Boot Program (PBP) entry point.
 ///
-/// The first parameter must be `BootParam` from `artinchip_rt::core::boot_rom`:
-///
-/// ```rust
-/// use artinchip_rt::core::boot_rom::BootParam;
-///
+/// ```ignore
 /// #[pbp_entry]
-/// fn pbp_main(boot_param: BootParam, private_data: &[u8])
+/// fn pbp_main(boot_param: BootParam, private_data: &[u8]) { ... }
 /// ```
 #[proc_macro_attribute]
 pub fn pbp_entry(args: TokenStream, input: TokenStream) -> TokenStream {
     let f = parse_macro_input!(input as ItemFn);
 
-    // check the function arguments
-    if f.sig.inputs.len() != 2 {
-        return parse::Error::new(
-            f.sig.inputs.last().unwrap().span(),
-            "`#[pbp_entry]` function should include exactly two parameters",
-        )
-        .to_compile_error()
-        .into();
-    }
-
-    let arg0_boot_param = &f.sig.inputs[0];
-    let arg1_private_data = &f.sig.inputs[1];
-
-    match arg0_boot_param {
-        FnArg::Receiver(_) => {
-            return parse::Error::new(
-                arg0_boot_param.span(),
-                "artinchip-rt-macros: invalid argument",
-            )
+    if !args.is_empty() {
+        return parse::Error::new(Span::call_site(), "`#[pbp_entry]` accepts no arguments")
             .to_compile_error()
             .into();
-        }
-        FnArg::Typed(t) => {
-            if let Type::Path(_p) = &*t.ty {
-                // empty
-            } else {
-                return parse::Error::new(
-                    t.ty.span(),
-                    "artinchip-rt-macros: argument type must be a path",
-                )
-                .to_compile_error()
-                .into();
-            }
-        }
     }
 
-    match arg1_private_data {
-        FnArg::Receiver(_) => {
-            return parse::Error::new(
-                arg1_private_data.span(),
-                "artinchip-rt-macros: invalid argument",
-            )
-            .to_compile_error()
-            .into();
-        }
-        FnArg::Typed(t) => {
-            if let Type::Reference(p) = &*t.ty
-                && let Type::Slice(_s) = &*p.elem
-            {
-                // empty
-            } else {
-                return parse::Error::new(
-                    t.ty.span(),
-                    "artinchip-rt-macros: argument type must be a reference to a slice",
-                )
-                .to_compile_error()
-                .into();
-            }
-        }
+    if let Err(err) = validate_boot_abi_inputs(&f, "`#[pbp_entry]`") {
+        return err.into();
     }
 
-    // check the function signature
+    let valid_return = match &f.sig.output {
+        ReturnType::Default => true,
+        ReturnType::Type(_, ty) => matches!(&**ty, Type::Never(_)),
+    };
     let valid_signature = f.sig.constness.is_none()
         && f.sig.asyncness.is_none()
         && f.vis == Visibility::Inherited
@@ -91,143 +38,169 @@ pub fn pbp_entry(args: TokenStream, input: TokenStream) -> TokenStream {
         && f.sig.generics.params.is_empty()
         && f.sig.generics.where_clause.is_none()
         && f.sig.variadic.is_none()
-        && matches!(f.sig.output, ReturnType::Default);
+        && valid_return;
 
     if !valid_signature {
         return parse::Error::new(
             f.span(),
-            "`#[pbp_entry]` function must have signature `[unsafe] fn pbp_main(boot_param: BootParam, private_data: &[u8])`",
+            "`#[pbp_entry]` function must have signature `[unsafe] fn pbp_main(boot_param: BootParam, private_data: &[u8]) [-> !]`",
         )
         .to_compile_error()
         .into();
     }
 
-    if !args.is_empty() {
-        return parse::Error::new(Span::call_site(), "This attribute accepts no arguments")
-            .to_compile_error()
-            .into();
-    }
-
     let attrs = f.attrs;
     let safety = f.sig.safety;
-    let args = f.sig.inputs;
+    let inputs = f.sig.inputs;
     let stmts = f.block.stmts;
     let ret = f.sig.output;
     let ident = f.sig.ident;
 
     quote!(
-        // The wrapper is the symbol the Boot/Rom startup jumps to, so its contract
-        // (the pointer and length come from the boot loader, not from Rust) cannot
-        // be checked. `unsafe` is how that is stated, and it is also what keeps
-        // `clippy::not_unsafe_ptr_arg_deref` quiet - the alternative, an `allow`,
-        // would hide the contract instead of documenting it.
+        ::artinchip_rt::__rt_pbp_startup!();
+
         #[unsafe(export_name = "pbp_main")]
         #(#attrs)*
         pub unsafe extern "C" fn #ident(boot_param: u32, priv_addr: *const u8, priv_len: u32) #ret {
-            // Images without a DATA2/private resource pass a null pointer.
-            // `from_raw_parts(null, 0)` is still invalid Rust, so represent
-            // that case with the canonical empty slice.
             let private_data = if priv_addr.is_null() || priv_len == 0 {
                 &[]
             } else {
-                unsafe { core::slice::from_raw_parts(priv_addr, priv_len as usize) }
+                unsafe { ::core::slice::from_raw_parts(priv_addr, priv_len as usize) }
             };
             let boot_param = ::artinchip_rt::core::boot_rom::BootParam::from_raw(boot_param);
-            unsafe { __artinchip_rt__pbp_main(boot_param, private_data ) }
+            #[allow(unused_unsafe)]
+            unsafe { __artinchip_rt__pbp_main(boot_param, private_data) }
         }
+
         #[allow(non_snake_case)]
         #[inline]
         #(#attrs)*
-        #safety fn __artinchip_rt__pbp_main(#args) #ret {
+        #safety fn __artinchip_rt__pbp_main(#inputs) #ret {
             #(#stmts)*
         }
     )
     .into()
 }
 
-/// Application image entry.
+/// Application image entry point (`AIC` loader resource).
 ///
-/// Unlike [`pbp_entry`], an application is a normal image loaded by the boot
-/// chain (PBP/bootloader), so it has its own startup symbol. The name argument
-/// identifies the app and is embedded as a marker symbol plus an `.app.name`
-/// section so different apps can be told apart in the image/tooling:
+/// Dispatches by function signature:
+/// - `async fn app_main()`: starts the built-in Embassy executor (with `CPU_TIMER`
+///   bound automatically) and polls the entry task.
+/// - `fn app_main(boot_param: BootParam, private_data: &[u8]) [-> !]`: runs
+///   synchronously with the BootROM/loader arguments (e.g. `app-bootloader`).
 ///
-/// ```rust
-/// use artinchip_rt::core::boot_rom::BootParam;
-///
-/// #[app_entry("app-bootloader")]
-/// fn app_main(boot_param: BootParam, private_data: &[u8])
-/// ```
+/// The image name is read from `env!("AIC_APP_NAME")` when invoked as `#[app_entry]`,
+/// or given explicitly via `#[app_entry("blinky")]`.
 #[proc_macro_attribute]
 pub fn app_entry(args: TokenStream, input: TokenStream) -> TokenStream {
     let f = parse_macro_input!(input as ItemFn);
 
-    let name = match syn::parse::<LitStr>(args) {
-        Ok(lit) => lit,
-        Err(_) => {
-            return parse::Error::new(
-                Span::call_site(),
-                "`#[app_entry(\"name\")]` requires the application name as a string literal",
-            )
-            .to_compile_error()
-            .into();
-        }
+    let name_expr = match parse_app_name(&args) {
+        Ok(expr) => expr,
+        Err(err) => return err.into(),
     };
-    let app_name = name.value();
-    if app_name.is_empty()
-        || !app_name
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
-    {
-        return parse::Error::new(name.span(), "application name must be [A-Za-z0-9_-]+")
+    let markers = app_markers(name_expr);
+
+    if f.sig.asyncness.is_some() {
+        expand_async_app_entry(f, markers)
+    } else {
+        expand_sync_app_entry(f, markers)
+    }
+}
+
+/// Bootloader entry (synchronous, bootloader partition only).
+///
+/// This entry is fixed to the bootloader image in the `bootloader` partition.
+/// It takes no name argument: the bootloader's AIC name and partition come from
+/// the board preset, not from the entry macro. Boot-chain images must use this
+/// entry instead of [`app_entry`].
+///
+/// ```ignore
+/// #[boot_entry]
+/// fn app_main(boot_param: BootParam, private_data: &[u8]) -> ! { ... }
+/// ```
+#[proc_macro_attribute]
+pub fn boot_entry(args: TokenStream, input: TokenStream) -> TokenStream {
+    let f = parse_macro_input!(input as ItemFn);
+    if !args.is_empty() {
+        return parse::Error::new(Span::call_site(), "`#[boot_entry]` accepts no arguments")
             .to_compile_error()
             .into();
     }
+    let markers = app_markers(quote!("bootloader"));
 
-    // Same ABI as the loader chain: (boot_param, private_data).
-    if f.sig.inputs.len() != 2 {
+    if let Err(err) = validate_boot_abi_inputs(&f, "`#[boot_entry]`") {
+        return err.into();
+    }
+    let valid_return = match &f.sig.output {
+        ReturnType::Default => true,
+        ReturnType::Type(_, ty) => matches!(&**ty, Type::Never(_)),
+    };
+    let valid_signature = f.sig.constness.is_none()
+        && f.sig.asyncness.is_none()
+        && f.vis == Visibility::Inherited
+        && f.sig.abi.is_none()
+        && f.sig.generics.params.is_empty()
+        && f.sig.generics.where_clause.is_none()
+        && f.sig.variadic.is_none()
+        && valid_return;
+    if !valid_signature {
         return parse::Error::new(
-            f.sig
-                .inputs
-                .last()
-                .map_or_else(Span::call_site, Spanned::span),
-            "`#[app_entry]` function should include exactly two parameters",
+            f.sig.span(),
+            "`#[boot_entry]` function must have signature `fn app_main(boot_param: BootParam, private_data: &[u8]) [-> !]`",
         )
         .to_compile_error()
         .into();
     }
-    for (index, arg) in f.sig.inputs.iter().enumerate() {
-        match arg {
-            FnArg::Receiver(_) => {
-                return parse::Error::new(arg.span(), "artinchip-rt-macros: invalid argument")
-                    .to_compile_error()
-                    .into();
-            }
-            FnArg::Typed(t) => match (index, &*t.ty) {
-                (0, Type::Path(_)) => {}
-                (1, Type::Reference(p)) if matches!(&*p.elem, Type::Slice(_)) => {}
-                (0, _) => {
-                    return parse::Error::new(
-                        t.ty.span(),
-                        "artinchip-rt-macros: first argument must be a path type",
-                    )
-                    .to_compile_error()
-                    .into();
-                }
-                _ => {
-                    return parse::Error::new(
-                        t.ty.span(),
-                        "artinchip-rt-macros: second argument must be a reference to a slice",
-                    )
-                    .to_compile_error()
-                    .into();
-                }
-            },
+
+    let attrs = f.attrs;
+    let safety = f.sig.safety;
+    let inputs = f.sig.inputs;
+    let stmts = f.block.stmts;
+    let ret = f.sig.output;
+    let ident = f.sig.ident;
+
+    quote!(
+        ::artinchip_rt::__rt_boot_startup!();
+
+        #[unsafe(export_name = "app_main")]
+        #(#attrs)*
+        pub unsafe extern "C" fn #ident(boot_param: u32, priv_addr: *const u8, priv_len: u32) #ret {
+            let private_data = if priv_addr.is_null() || priv_len == 0 {
+                &[]
+            } else {
+                unsafe { ::core::slice::from_raw_parts(priv_addr, priv_len as usize) }
+            };
+            let boot_param = ::artinchip_rt::core::boot_rom::BootParam::from_raw(boot_param);
+            #[allow(unused_unsafe)]
+            unsafe { __artinchip_rt__app_main(boot_param, private_data) }
         }
+
+        #[allow(non_snake_case)]
+        #[inline]
+        #(#attrs)*
+        #safety fn __artinchip_rt__app_main(#inputs) #ret {
+            #(#stmts)*
+        }
+
+        #markers
+    )
+    .into()
+}
+
+fn expand_async_app_entry(f: ItemFn, markers: proc_macro2::TokenStream) -> TokenStream {
+    if let Some(arg) = f.sig.inputs.first() {
+        return parse::Error::new(
+            arg.span(),
+            "async `#[app_entry]` function takes no arguments; use a synchronous `fn(BootParam, &[u8])` entry if BootROM arguments are required",
+        )
+        .to_compile_error()
+        .into();
     }
 
     let valid_signature = f.sig.constness.is_none()
-        && f.sig.asyncness.is_none()
+        && matches!(f.sig.safety, syn::Safety::Default)
         && f.vis == Visibility::Inherited
         && f.sig.abi.is_none()
         && f.sig.generics.params.is_empty()
@@ -236,8 +209,61 @@ pub fn app_entry(args: TokenStream, input: TokenStream) -> TokenStream {
         && matches!(f.sig.output, ReturnType::Default);
     if !valid_signature {
         return parse::Error::new(
-            f.span(),
-            "`#[app_entry]` function must have signature `fn app_main(boot_param: BootParam, private_data: &[u8])`",
+            f.sig.span(),
+            "async `#[app_entry]` function must have signature `async fn app_main()`",
+        )
+        .to_compile_error()
+        .into();
+    }
+
+    let attrs = f.attrs;
+    let stmts = f.block.stmts;
+    let ident = f.sig.ident;
+
+    quote!(
+        ::artinchip_rt::__rt_app_startup!();
+
+        #[unsafe(export_name = "app_main")]
+        #(#attrs)*
+        pub unsafe extern "C" fn #ident(_boot_param: u32, _priv_addr: *const u8, _priv_len: u32) -> ! {
+            #[::artinchip_rt::embassy_executor::task(
+                embassy_executor = ::artinchip_rt::embassy_executor
+            )]
+            #[allow(clippy::future_not_send)]
+            async fn __artinchip_rt__app_main() {
+                #(#stmts)*
+            }
+
+            let task = __artinchip_rt__app_main()
+                .expect("application entry task pool is exhausted");
+            ::artinchip_rt::app::run_task(task)
+        }
+
+        #markers
+    )
+    .into()
+}
+
+fn expand_sync_app_entry(f: ItemFn, markers: proc_macro2::TokenStream) -> TokenStream {
+    if let Err(err) = validate_boot_abi_inputs(&f, "synchronous `#[app_entry]`") {
+        return err.into();
+    }
+
+    let valid_return = match &f.sig.output {
+        ReturnType::Default => true,
+        ReturnType::Type(_, ty) => matches!(&**ty, Type::Never(_)),
+    };
+    let valid_signature = f.sig.constness.is_none()
+        && f.vis == Visibility::Inherited
+        && f.sig.abi.is_none()
+        && f.sig.generics.params.is_empty()
+        && f.sig.generics.where_clause.is_none()
+        && f.sig.variadic.is_none()
+        && valid_return;
+    if !valid_signature {
+        return parse::Error::new(
+            f.sig.span(),
+            "synchronous `#[app_entry]` function must have signature `[unsafe] fn app_main(boot_param: BootParam, private_data: &[u8]) [-> !]`",
         )
         .to_compile_error()
         .into();
@@ -245,48 +271,145 @@ pub fn app_entry(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let attrs = f.attrs;
     let safety = f.sig.safety;
-    let args = f.sig.inputs;
+    let inputs = f.sig.inputs;
     let stmts = f.block.stmts;
     let ret = f.sig.output;
     let ident = f.sig.ident;
 
-    // Per-app marker symbols are plain identifiers, names are already
-    // restricted to [A-Za-z0-9_-].
-    let marker = format!("__app_entry_{}", app_name.replace('-', "_"));
-    let name_len = app_name.len() + 1;
-    let name_bytes = app_name.as_bytes();
-
     quote!(
-        // See `pbp_entry`: the contract is the boot chain's, not Rust's.
+        ::artinchip_rt::__rt_app_startup!();
+
         #[unsafe(export_name = "app_main")]
         #(#attrs)*
         pub unsafe extern "C" fn #ident(boot_param: u32, priv_addr: *const u8, priv_len: u32) #ret {
             let private_data = if priv_addr.is_null() || priv_len == 0 {
                 &[]
             } else {
-                unsafe { core::slice::from_raw_parts(priv_addr, priv_len as usize) }
+                unsafe { ::core::slice::from_raw_parts(priv_addr, priv_len as usize) }
             };
             let boot_param = ::artinchip_rt::core::boot_rom::BootParam::from_raw(boot_param);
+            #[allow(unused_unsafe)]
             unsafe { __artinchip_rt__app_main(boot_param, private_data) }
         }
+
         #[allow(non_snake_case)]
         #[inline]
         #(#attrs)*
-        #safety fn __artinchip_rt__app_main(#args) #ret {
+        #safety fn __artinchip_rt__app_main(#inputs) #ret {
             #(#stmts)*
         }
 
-        /// Application name marker (unique symbol per app).
-        #[doc(hidden)]
-        #[unsafe(export_name = #marker)]
-        #[used]
-        pub static APP_ENTRY_MARKER: u8 = 0;
+        #markers
+    )
+    .into()
+}
 
-        /// Application name bytes, kept in `.app.name` for image tooling.
+fn validate_boot_abi_inputs(f: &ItemFn, macro_label: &str) -> Result<(), proc_macro2::TokenStream> {
+    if f.sig.inputs.len() != 2 {
+        return Err(parse::Error::new(
+            f.sig
+                .inputs
+                .last()
+                .map_or_else(Span::call_site, Spanned::span),
+            format!(
+                "{macro_label} function must take `(boot_param: BootParam, private_data: &[u8])`"
+            ),
+        )
+        .to_compile_error());
+    }
+
+    for (index, arg) in f.sig.inputs.iter().enumerate() {
+        match arg {
+            FnArg::Receiver(_) => {
+                return Err(
+                    parse::Error::new(arg.span(), "entry function cannot take `self`")
+                        .to_compile_error(),
+                );
+            }
+            FnArg::Typed(t) => match (index, &*t.ty) {
+                (0, Type::Path(_)) => {}
+                (1, Type::Reference(p)) if matches!(&*p.elem, Type::Slice(_)) => {}
+                (0, _) => {
+                    return Err(parse::Error::new(
+                        t.ty.span(),
+                        "first parameter must be `BootParam`",
+                    )
+                    .to_compile_error());
+                }
+                _ => {
+                    return Err(
+                        parse::Error::new(t.ty.span(), "second parameter must be `&[u8]`")
+                            .to_compile_error(),
+                    );
+                }
+            },
+        }
+    }
+    Ok(())
+}
+
+fn parse_app_name(
+    args: &TokenStream,
+) -> Result<proc_macro2::TokenStream, proc_macro2::TokenStream> {
+    if args.is_empty() {
+        return Ok(quote!(::core::env!("AIC_APP_NAME")));
+    }
+
+    let name = syn::parse::<LitStr>(args.clone()).map_err(|_| {
+        parse::Error::new(
+            Span::call_site(),
+            "`#[app_entry]` expects either no arguments (`AIC_APP_NAME` env) or a string literal",
+        )
+        .to_compile_error()
+    })?;
+
+    let value = name.value();
+    if value.is_empty()
+        || !value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    {
+        return Err(
+            parse::Error::new(name.span(), "application name must match [A-Za-z0-9_-]+")
+                .to_compile_error(),
+        );
+    }
+
+    Ok(quote!(#name))
+}
+
+fn app_markers(name_expr: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+    quote!(
+        #[doc(hidden)]
+        const __AIC_APP_NAME: &str = #name_expr;
+
+        const _: () = {
+            let bytes = __AIC_APP_NAME.as_bytes();
+            assert!(!bytes.is_empty(), "application name must not be empty");
+            let mut i = 0;
+            while i < bytes.len() {
+                let b = bytes[i];
+                assert!(
+                    b.is_ascii_alphanumeric() || b == b'_' || b == b'-',
+                    "application name must match [A-Za-z0-9_-]+"
+                );
+                i += 1;
+            }
+        };
+
+        /// Null-terminated application name stored in `.app.name` for image tooling.
         #[doc(hidden)]
         #[unsafe(link_section = ".app.name")]
         #[used]
-        pub static APP_ENTRY_NAME: [u8; #name_len] = [#(#name_bytes,)* 0];
+        pub static APP_ENTRY_NAME: [u8; __AIC_APP_NAME.len() + 1] = {
+            let bytes = __AIC_APP_NAME.as_bytes();
+            let mut out = [0u8; __AIC_APP_NAME.len() + 1];
+            let mut i = 0;
+            while i < bytes.len() {
+                out[i] = bytes[i];
+                i += 1;
+            }
+            out
+        };
     )
-    .into()
 }

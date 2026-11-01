@@ -6,6 +6,9 @@ use artinchip_hal::instances::*;
 use embedded_time::rate::Hertz;
 use paste::paste;
 
+/// Machine timer (`mtime`) frequency, shared by the CLIC timer interrupt.
+pub const MACHINE_TIMER_HZ: u32 = 4_000_000;
+
 /// Default D13x clock tree.
 pub const fn default_clk_tree() -> ClockTree {
     ClockTree::new(
@@ -13,7 +16,7 @@ pub const fn default_clk_tree() -> ClockTree {
         Hertz(1_200_000_000),
         Hertz(800_000_000),
         None,
-        None,
+        Some(Hertz(640_000_000)),
     )
 }
 
@@ -42,7 +45,7 @@ pub struct Peripherals {
     /// Secure Digital Host Controller 1.
     pub sdmc1: Sdmc<1>,
     /// System Configuration.
-    pub syscfg: SysCfg,
+    pub syscfg: SysCfg<V1>,
     /// Clock Manage Unit.
     pub cmu: Cmu,
     /// Serial Peripheral Interface Encryption.
@@ -96,7 +99,7 @@ pub struct Peripherals {
     /// Pulse Width Modulation.
     pub pwm: PwmChannels,
     /// Core Local Interrupt.
-    pub clint: Clint,
+    pub clint: ClintV1,
     /// Core Local Interrupt Controller.
     pub clic: Clic,
 }
@@ -107,9 +110,9 @@ soc! {
     /// Crypto Engine.
     pub struct CE => 0x10020000, artinchip_hal::ce::RegisterBlock;
     /// USB device controller.
-    pub struct USB_DEV => 0x10200000, artinchip_hal::usbdrd::dev_register::RegisterBlock;
+    pub struct USB_DEV => 0x10200000, artinchip_hal::usbdrd::device::dev_register::RegisterBlock;
     /// USB host controller.
-    pub struct USB_HOST => 0x10210000, artinchip_hal::usbdrd::host_register::RegisterBlock;
+    pub struct USB_HOST => 0x10210000, artinchip_hal::usbdrd::host::host_register::RegisterBlock;
     /// Expanded Serial Peripheral Interface.
     pub struct XSPI => 0x10300000, artinchip_hal::xspi::RegisterBlock;
     /// Quad Serial Peripheral Interface 0.
@@ -125,7 +128,7 @@ soc! {
     /// Secure Digital Host Controller 1.
     pub struct SDMC1 => 0x10450000, artinchip_hal::sdmc::RegisterBlock;
     /// System Configuration.
-    pub struct SYSCFG => 0x18000000, artinchip_hal::sys_cfg::RegisterBlock;
+    pub struct SYSCFG => 0x18000000, artinchip_hal::sys_cfg::register_v1::RegisterBlock;
     /// Clock Manage Unit.
     pub struct CMU => 0x18020000, artinchip_hal::cmu::RegisterBlock;
     /// Serial Peripheral Interface Encryption.
@@ -190,7 +193,7 @@ impl Peripherals {
             qspi3: Qspi::__new(QSPI3::ptr()),
             sdmc0: Sdmc::__new(SDMC0::ptr()),
             sdmc1: Sdmc::__new(SDMC1::ptr()),
-            syscfg: SysCfg::__new(SYSCFG::ptr()),
+            syscfg: SysCfg::<V1>::__new(SYSCFG::ptr()),
             cmu: Cmu::__new(CMU::ptr()),
             spi_enc: SpiEnc::__new(SPI_ENC::ptr()),
             axi_cfg: AxiCfg::__new(AXICFG::ptr()),
@@ -217,7 +220,7 @@ impl Peripherals {
             i2c1: I2c::__new(I2C1::ptr()),
             i2c2: I2c::__new(I2C2::ptr()),
             pwm: PwmChannels::__new(PWM::ptr()),
-            clint: Clint::__new(CLINT::ptr()),
+            clint: ClintV1::__new(CLINT::ptr()),
             clic: Clic::__new(CLIC::ptr()),
         }
     }
